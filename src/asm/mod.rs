@@ -15,6 +15,7 @@ impl fmt::Display for Assembly {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[allow(dead_code)]
 pub enum Ent {
     /// e.g. `.intel_syntax noprefix`
     Dot(String, String),
@@ -25,6 +26,7 @@ pub enum Ent {
     Raw(String),
 }
 
+#[allow(dead_code)]
 impl Ent {
     fn dot(name: &str, content: &str) -> Ent {
         Ent::Dot(String::from(name), String::from(content))
@@ -41,7 +43,7 @@ impl fmt::Display for Ent {
         match self {
             Dot(name, content) => write!(f, ".{} {}", name, content),
             Fun(fun) => write!(f, "{}", fun),
-            Emp => write!(f, ""),
+            Empty => write!(f, ""),
             Raw(s) => write!(f, "{}", s),
         }
     }
@@ -67,6 +69,7 @@ impl fmt::Display for Function {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[allow(dead_code)]
 pub enum Ins {
     ADD(Opr, Opr),
     CALL(String),
@@ -74,6 +77,7 @@ pub enum Ins {
     RET,
 }
 
+#[allow(dead_code)]
 impl Ins {
     fn call(name: &str) -> Ins {
         Ins::CALL(String::from(name))
@@ -93,6 +97,7 @@ impl fmt::Display for Ins {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[allow(dead_code)]
 pub enum Opr {
     Direct(Reg),
     Literal(u64),
@@ -109,6 +114,7 @@ impl fmt::Display for Opr {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[allow(dead_code)]
 pub enum SegReg {
     CS,
     DS,
@@ -133,6 +139,7 @@ impl fmt::Display for SegReg {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[allow(dead_code)]
 pub enum Reg {
     RAX,
     RBX,
