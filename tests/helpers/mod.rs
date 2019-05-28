@@ -1,13 +1,28 @@
 use env_logger;
 use std::ffi::OsStr;
-use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::{io, panic};
 use tempdir::TempDir;
 
-pub fn setup() {
+pub fn run_test<T>(test: T) -> ()
+where
+    T: FnOnce() -> () + panic::UnwindSafe,
+{
+    setup();
+
+    let result = panic::catch_unwind(|| test());
+
+    teardown();
+
+    assert!(result.is_ok());
+}
+
+fn setup() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
+
+fn teardown() {}
 
 fn testdata_path(name: &str) -> PathBuf {
     PathBuf::from("testdata").join(name)
