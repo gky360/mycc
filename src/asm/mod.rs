@@ -106,7 +106,7 @@ impl fmt::Display for Ins {
 #[allow(dead_code)]
 pub enum Opr {
     Direct(Reg),
-    Literal(u64),
+    Literal(u32),
 }
 
 impl fmt::Display for Opr {

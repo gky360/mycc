@@ -42,6 +42,20 @@ pub struct Opt {
     pub output: PathBuf,
 }
 
+fn read_literal(source: &str, pos: usize) -> Result<(u32, usize)> {
+    let s = source.as_bytes();
+    let mut r = pos;
+    while r < s.len() && '0' as u8 <= s[r] && s[r] <= '9' as u8 {
+        r += 1;
+    }
+    let literal = std::str::from_utf8(&s[pos..r])
+        .map_err(|_| Error::Parse("invalid utf8 char"))?
+        .parse()
+        .map_err(|_| Error::Parse("failed to parse literal"))?;
+
+    Ok((literal, r))
+}
+
 pub fn run(opt: &Opt) -> Result<()> {
     use asm::Opr::*;
     use asm::Reg::*;
@@ -49,7 +63,7 @@ pub fn run(opt: &Opt) -> Result<()> {
     debug!("{:?}", opt);
 
     let source = fs::read_to_string(&opt.input)?;
-    let literal: u64 = source
+    let literal: u32 = source
         .parse()
         .map_err(|_| Error::Parse("failed to parse literal"))?;
 
