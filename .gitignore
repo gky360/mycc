@@ -1,2 +1,13 @@
 /target
 **/*.rs.bk
+
+
+### https://raw.github.com/github/gitignore/a00cb872ef1e0fb64dcbe9435b47fd7f00065ee9/Global/VisualStudioCode.gitignore
+
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+
