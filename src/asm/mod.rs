@@ -21,8 +21,18 @@ pub enum Ent {
     /// e.g. `main:`
     Fun(Function),
     /// empty line
-    Emp,
+    Empty,
     Raw(String),
+}
+
+impl Ent {
+    fn dot(name: &str, content: &str) -> Ent {
+        Ent::Dot(String::from(name), String::from(content))
+    }
+
+    fn raw(content: &str) -> Ent {
+        Ent::Raw(String::from(content))
+    }
 }
 
 impl fmt::Display for Ent {
@@ -38,7 +48,13 @@ impl fmt::Display for Ent {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Function(FunName, Vec<Ins>);
+pub struct Function(String, Vec<Ins>);
+
+impl Function {
+    fn new(name: &str, instructions: Vec<Ins>) -> Function {
+        Function(String::from(name), instructions)
+    }
+}
 
 impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -51,20 +67,17 @@ impl fmt::Display for Function {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct FunName(String);
-
-impl fmt::Display for FunName {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Ins {
     ADD(Opr, Opr),
     CALL(String),
     MOV(Opr, Opr),
     RET,
+}
+
+impl Ins {
+    fn call(name: &str) -> Ins {
+        Ins::CALL(String::from(name))
+    }
 }
 
 impl fmt::Display for Ins {
@@ -140,5 +153,42 @@ impl fmt::Display for Reg {
             RSI => write!(f, "rsi"),
             RDI => write!(f, "rdi"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_display() {
+        use Ins::*;
+        use Opr::*;
+        use Reg::*;
+
+        let fn_main = Function::new(
+            "main",
+            vec![
+                MOV(Direct(RAX), Literal(42)), // mov rax, 42
+                RET,                           // ret
+            ],
+        );
+        let assembly = Assembly(vec![
+            Ent::dot("intel_syntax", "noprefix"),
+            Ent::dot("global", "main"),
+            Ent::Empty,
+            Ent::Fun(fn_main),
+        ]);
+
+        let expected = r#"
+.intel_syntax noprefix
+.global main
+
+main:
+    mov rax, 42
+    ret
+
+"#;
+        assert_eq!(&format!("\n{}", assembly), expected);
     }
 }
