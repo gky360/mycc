@@ -5,6 +5,12 @@ static INDENT: &str = "    ";
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Assembly(Vec<Ent>);
 
+impl Assembly {
+    pub fn new(entries: Vec<Ent>) -> Assembly {
+        Assembly(entries)
+    }
+}
+
 impl fmt::Display for Assembly {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for ent in self.0.iter() {
@@ -28,11 +34,11 @@ pub enum Ent {
 
 #[allow(dead_code)]
 impl Ent {
-    fn dot(name: &str, content: &str) -> Ent {
+    pub fn dot(name: &str, content: &str) -> Ent {
         Ent::Dot(String::from(name), String::from(content))
     }
 
-    fn raw(content: &str) -> Ent {
+    pub fn raw(content: &str) -> Ent {
         Ent::Raw(String::from(content))
     }
 }
@@ -53,7 +59,7 @@ impl fmt::Display for Ent {
 pub struct Function(String, Vec<Ins>);
 
 impl Function {
-    fn new(name: &str, instructions: Vec<Ins>) -> Function {
+    pub fn new(name: &str, instructions: Vec<Ins>) -> Function {
         Function(String::from(name), instructions)
     }
 }
@@ -79,7 +85,7 @@ pub enum Ins {
 
 #[allow(dead_code)]
 impl Ins {
-    fn call(name: &str) -> Ins {
+    pub fn call(name: &str) -> Ins {
         Ins::CALL(String::from(name))
     }
 }
@@ -179,7 +185,7 @@ mod tests {
                 Ins::RET,                           // ret
             ],
         );
-        let assembly = Assembly(vec![
+        let assembly = Assembly::new(vec![
             Ent::dot("intel_syntax", "noprefix"),
             Ent::dot("global", "main"),
             Ent::Empty,
@@ -220,7 +226,7 @@ main:
                 Ins::RET,                          // ret
             ],
         );
-        let assembly = Assembly(vec![
+        let assembly = Assembly::new(vec![
             Ent::dot("intel_syntax", "noprefix"),
             Ent::dot("global", "plus, main"),
             Ent::Empty,
