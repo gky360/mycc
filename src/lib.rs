@@ -35,11 +35,11 @@ impl From<io::Error> for Error {
 pub struct Opt {
     /// Input file
     #[structopt(parse(from_os_str))]
-    input: PathBuf,
+    pub input: PathBuf,
 
     /// Place the output into <output>
     #[structopt(short = "o", parse(from_os_str), default_value = "a.s")]
-    output: PathBuf,
+    pub output: PathBuf,
 }
 
 pub fn run(opt: &Opt) -> Result<()> {
