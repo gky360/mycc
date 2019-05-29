@@ -43,6 +43,11 @@ impl Loc {
     pub fn merge(&self, other: &Loc) -> Loc {
         Loc(min(self.0, other.0), max(self.1, other.1))
     }
+
+    pub fn annotate(&self, f: &mut fmt::Formatter, input: &str) -> fmt::Result {
+        writeln!(f, "{}", input)?;
+        writeln!(f, "{}{}", " ".repeat(self.0), "^".repeat(self.1 - self.0))
+    }
 }
 
 impl fmt::Display for Loc {
