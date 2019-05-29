@@ -12,9 +12,13 @@ pub enum LexErrorKind {
     Eof,
 }
 
-pub type LexError = Annot<LexErrorKind>;
+#[derive(Fail, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct LexError(Annot<LexErrorKind>);
 
 impl LexError {
+    fn new(kind: LexErrorKind, loc: Loc) -> Self {
+        LexError(Annot::new(kind, loc))
+    }
     fn invalid_char(c: char, loc: Loc) -> Self {
         LexError::new(LexErrorKind::InvalidChar(c), loc)
     }
@@ -23,14 +27,11 @@ impl LexError {
     }
 }
 
-impl std::error::Error for LexError {}
-
 impl fmt::Display for LexError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::LexErrorKind::*;
-        let loc = &self.loc;
-        match self.value {
-            InvalidChar(c) => write!(f, "{}: invalid char '{}'", loc, c),
+        match self.0.value {
+            InvalidChar(c) => write!(f, "{}: invalid char '{}'", self.0.loc, c),
             Eof => write!(f, "End of file"),
         }
     }

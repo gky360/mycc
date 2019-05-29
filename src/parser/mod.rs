@@ -6,9 +6,8 @@ use super::lexer::{Annot, LexError, Lexer, Loc, Token, TokenKind};
 
 pub type Result<T> = std::result::Result<T, ParseError>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Fail, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ParseError {
-    #[allow(dead_code)]
     UnexpectedToken(Token),
     NotExpression(Token),
     NotOperator(Token),
@@ -16,8 +15,6 @@ pub enum ParseError {
     RedundantExpression(Token),
     Eof,
 }
-
-impl std::error::Error for ParseError {}
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

@@ -10,6 +10,7 @@ use structopt::StructOpt;
 
 use crate::asm::{Assembly, Ent, Function, Ins};
 use crate::lexer::{LexError, Lexer, TokenKind};
+use crate::parser::ParseError;
 
 pub mod asm;
 pub mod lexer;
@@ -20,24 +21,30 @@ pub type Result<T> = result::Result<T, Error>;
 #[derive(Fail, Debug)]
 pub enum Error {
     #[fail(display = "IoError: {}", _0)]
-    Io(io::Error),
+    Io(#[fail(cause)] io::Error),
     #[fail(display = "LexError: {}", _0)]
-    Lex(LexError),
+    Lex(#[fail(cause)] LexError),
     #[fail(display = "ParseError: {}", _0)]
-    Parse(&'static str),
+    Parse(#[fail(cause)] ParseError),
     #[fail(display = "Unknown")]
     Unknown,
-}
-
-impl From<lexer::LexError> for Error {
-    fn from(err: lexer::LexError) -> Error {
-        Error::Lex(err)
-    }
 }
 
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
         Error::Io(err)
+    }
+}
+
+impl From<LexError> for Error {
+    fn from(err: LexError) -> Error {
+        Error::Lex(err)
+    }
+}
+
+impl From<ParseError> for Error {
+    fn from(err: ParseError) -> Error {
+        Error::Parse(err)
     }
 }
 
@@ -66,29 +73,29 @@ pub fn run(opt: &Opt) -> Result<()> {
     let tokens = lexer.lex()?;
 
     let mut instructions = Vec::new();
-    if let TokenKind::Number(n) = tokens[0].value {
-        instructions.push(Ins::MOV(Direct(RAX), Literal(n)));
-    } else {
-        return Err(Error::Parse("unexpected token"));
-    }
+    // if let TokenKind::Number(n) = tokens[0].value {
+    //     instructions.push(Ins::MOV(Direct(RAX), Literal(n)));
+    // } else {
+    //     return Err(Error::Parse("unexpected token"));
+    // }
 
-    let mut i = 1;
-    while i < tokens.len() {
-        if let TokenKind::Number(n) = tokens[i + 1].value {
-            let ins = match tokens[i].value {
-                TokenKind::Plus => Ins::ADD(Direct(RAX), Literal(n)),
-                TokenKind::Minus => Ins::SUB(Direct(RAX), Literal(n)),
-                _ => return Err(Error::Parse("unexpected token")),
-            };
-            instructions.push(ins);
-        } else {
-            return Err(Error::Parse("unexpected token"));
-        }
-        i += 2;
-    }
-    if i != tokens.len() {
-        return Err(Error::Parse("unexpected token"));
-    }
+    // let mut i = 1;
+    // while i < tokens.len() {
+    //     if let TokenKind::Number(n) = tokens[i + 1].value {
+    //         let ins = match tokens[i].value {
+    //             TokenKind::Plus => Ins::ADD(Direct(RAX), Literal(n)),
+    //             TokenKind::Minus => Ins::SUB(Direct(RAX), Literal(n)),
+    //             _ => return Err(Error::Parse("unexpected token")),
+    //         };
+    //         instructions.push(ins);
+    //     } else {
+    //         return Err(Error::Parse("unexpected token"));
+    //     }
+    //     i += 2;
+    // }
+    // if i != tokens.len() {
+    //     return Err(Error::Parse("unexpected token"));
+    // }
 
     instructions.push(Ins::RET);
 
