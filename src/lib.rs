@@ -9,8 +9,7 @@ use std::{fs, io, result};
 use structopt::StructOpt;
 
 use crate::asm::{Assembly, Ent, Function, Ins};
-use crate::lexer::{LexError, Lexer, TokenKind};
-use crate::parser::ParseError;
+use crate::parser::{Ast, ParseError};
 
 pub mod asm;
 pub mod lexer;
@@ -20,25 +19,17 @@ pub type Result<T> = result::Result<T, Error>;
 
 #[derive(Fail, Debug)]
 pub enum Error {
-    #[fail(display = "IoError: {}", _0)]
+    #[fail(display = "IoError")]
     Io(#[fail(cause)] io::Error),
-    #[fail(display = "LexError: {}", _0)]
-    Lex(#[fail(cause)] LexError),
-    #[fail(display = "ParseError: {}", _0)]
+    #[fail(display = "ParseError")]
     Parse(#[fail(cause)] ParseError),
-    #[fail(display = "Unknown")]
+    #[fail(display = "Unknown Error")]
     Unknown,
 }
 
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
         Error::Io(err)
-    }
-}
-
-impl From<LexError> for Error {
-    fn from(err: LexError) -> Error {
-        Error::Lex(err)
     }
 }
 
@@ -68,35 +59,10 @@ pub fn run(opt: &Opt) -> Result<()> {
     debug!("{:?}", opt);
 
     let source = fs::read_to_string(&opt.input)?;
-
-    let lexer = Lexer::new(&source);
-    let tokens = lexer.lex()?;
+    let ast: Ast = source.parse()?;
+    debug!("{:#?}", ast);
 
     let mut instructions = Vec::new();
-    // if let TokenKind::Number(n) = tokens[0].value {
-    //     instructions.push(Ins::MOV(Direct(RAX), Literal(n)));
-    // } else {
-    //     return Err(Error::Parse("unexpected token"));
-    // }
-
-    // let mut i = 1;
-    // while i < tokens.len() {
-    //     if let TokenKind::Number(n) = tokens[i + 1].value {
-    //         let ins = match tokens[i].value {
-    //             TokenKind::Plus => Ins::ADD(Direct(RAX), Literal(n)),
-    //             TokenKind::Minus => Ins::SUB(Direct(RAX), Literal(n)),
-    //             _ => return Err(Error::Parse("unexpected token")),
-    //         };
-    //         instructions.push(ins);
-    //     } else {
-    //         return Err(Error::Parse("unexpected token"));
-    //     }
-    //     i += 2;
-    // }
-    // if i != tokens.len() {
-    //     return Err(Error::Parse("unexpected token"));
-    // }
-
     instructions.push(Ins::RET);
 
     let fn_main = Function::new("main", instructions);
