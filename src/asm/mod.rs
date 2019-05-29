@@ -80,6 +80,7 @@ pub enum Ins {
     ADD(Opr, Opr),
     CALL(String),
     MOV(Opr, Opr),
+    SUB(Opr, Opr),
     RET,
 }
 
@@ -97,6 +98,7 @@ impl fmt::Display for Ins {
             ADD(opr1, opr2) => write!(f, "add {}, {}", opr1, opr2),
             CALL(name) => write!(f, "call {}", name),
             MOV(opr1, opr2) => write!(f, "mov {}, {}", opr1, opr2),
+            SUB(opr1, opr2) => write!(f, "sub {}, {}", opr1, opr2),
             RET => write!(f, "ret"),
         }
     }
