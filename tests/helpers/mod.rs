@@ -5,7 +5,7 @@ use std::process::{Command, Output};
 use std::{io, panic};
 use tempdir::TempDir;
 
-fn run_test<T>(test: T) -> ()
+pub fn run_test<T>(test: T) -> ()
 where
     T: FnOnce() -> () + panic::UnwindSafe,
 {
@@ -68,9 +68,7 @@ fn compile_and_exec(testdata_name: &str, args: &[&OsStr]) -> mycc::Result<Output
 }
 
 pub fn assert_exit_status(testdata_name: &str, args: &[&OsStr], exit_code: i32) {
-    run_test(|| {
-        let output = compile_and_exec(testdata_name, args)
-            .expect("failed to compile and execute the test source file");
-        assert_eq!(output.status.code(), Some(exit_code));
-    });
+    let output = compile_and_exec(testdata_name, args)
+        .expect("failed to compile and execute the test source file");
+    assert_eq!(output.status.code(), Some(exit_code));
 }
