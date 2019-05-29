@@ -43,13 +43,13 @@ impl From<ParseError> for Error {
 #[derive(StructOpt, Debug, Clone, PartialEq, Eq, Hash)]
 #[structopt()]
 pub struct Opt {
-    /// Input file
-    #[structopt(parse(from_os_str))]
-    pub input: PathBuf,
-
-    /// Place the output into <output>
+    /// Place the output into <output> path
     #[structopt(short = "o", parse(from_os_str), default_value = "a.s")]
     pub output: PathBuf,
+
+    /// Load source code from <input> path
+    #[structopt(parse(from_os_str))]
+    pub input: PathBuf,
 }
 
 
