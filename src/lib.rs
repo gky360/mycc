@@ -11,6 +11,8 @@ use structopt::StructOpt;
 use crate::asm::{Assembly, Ent, Function, Ins};
 
 pub mod asm;
+pub mod lexer;
+pub mod parser;
 
 pub type Result<T> = result::Result<T, Error>;
 
