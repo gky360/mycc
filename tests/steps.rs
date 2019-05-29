@@ -38,8 +38,8 @@ fn step_04_basic_arithmetics() {
 #[test]
 fn step_05_unary_operator() {
     run_test(|| {
-        assert_exit_status("step_05/unary_operator_01.c", &[], -3);
-        assert_exit_status("step_05/unary_operator_02.c", &[], -8);
-        assert_exit_status("step_05/unary_operator_03.c", &[], -15);
+        assert_exit_status("step_05/unary_operator_01.c", &[], 256 - 3);
+        assert_exit_status("step_05/unary_operator_02.c", &[], 256 - 8);
+        assert_exit_status("step_05/unary_operator_03.c", &[], 256 - 15);
     });
 }

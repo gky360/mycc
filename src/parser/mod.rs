@@ -51,6 +51,7 @@ impl fmt::Display for ParseError {
 pub enum AstNode {
     Num(u64),
     BinOp { op: BinOp, l: Box<Ast>, r: Box<Ast> },
+    UniOp { op: UniOp, e: Box<Ast> },
 }
 
 pub type Ast = Annot<AstNode>;
@@ -69,6 +70,9 @@ impl Ast {
             },
             loc,
         )
+    }
+    fn uniop(op: UniOp, e: Ast, loc: Loc) -> Self {
+        Self::new(AstNode::UniOp { op, e: Box::new(e) }, loc)
     }
 }
 
@@ -108,11 +112,30 @@ impl BinOp {
 }
 
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum UniOpKind {
+    Positive,
+    Negative,
+}
+
+pub type UniOp = Annot<UniOpKind>;
+
+impl UniOp {
+    fn positive(loc: Loc) -> Self {
+        Self::new(UniOpKind::Positive, loc)
+    }
+    fn negative(loc: Loc) -> Self {
+        Self::new(UniOpKind::Negative, loc)
+    }
+}
+
+
 /// Parse tokens with following rules
 ///
-/// expr = mul ("+" mul | "-" mul)*
-/// mul  = term ("*" term | "/" term)*
-/// term = num | "(" expr ")"
+/// expr  = mul ("+" mul | "-" mul)*
+/// mul   = unary ("*" unary | "/" unary)*
+/// unary = ("+" | "-")? term
+/// term  = num | "(" expr ")"
 fn parse(tokens: Vec<Token>) -> Result<Ast> {
     debug!("parse --");
 
@@ -156,14 +179,14 @@ where
 
 /// Parse mul
 ///
-/// mul = term ("*" term | "/" term)*
+/// mul = unary ("*" unary | "/" unary)*
 fn parse_mul<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
     debug!("parse_mul --");
 
-    let mut e = parse_term(tokens)?;
+    let mut e = parse_unary(tokens)?;
 
     while let Some(token) = tokens.peek() {
         let op = match token.value {
@@ -171,13 +194,46 @@ where
             TokenKind::Slash => BinOp::div(tokens.next().unwrap().loc),
             _ => break,
         };
-        let r = parse_term(tokens)?;
+        let r = parse_unary(tokens)?;
         let loc = e.loc.merge(&r.loc);
         e = Ast::binop(op, e, r, loc);
     }
 
     let ret = Ok(e);
     debug!("parse_mul: {:?}", ret);
+    ret
+}
+
+/// Parse unary
+///
+/// unary = ("+" | "-")? term
+fn parse_unary<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_unary --");
+
+    let ret = match tokens.peek().map(|token| token.value) {
+        Some(TokenKind::Plus) | Some(TokenKind::Minus) => {
+            let op = match tokens.next().unwrap() {
+                Token {
+                    value: TokenKind::Plus,
+                    loc,
+                } => UniOp::positive(loc),
+                Token {
+                    value: TokenKind::Minus,
+                    loc,
+                } => UniOp::negative(loc),
+                _ => unreachable!(),
+            };
+            let e = parse_term(tokens)?;
+            let loc = op.loc.merge(&e.loc);
+            Ok(Ast::uniop(op, e, loc))
+        }
+        _ => parse_term(tokens),
+    };
+
+    debug!("parse_unary: {:?}", ret);
     ret
 }
 

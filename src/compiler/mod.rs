@@ -1,5 +1,5 @@
 use crate::asm::{Assembly, Ent, Function, Ins, Opr, Reg};
-use crate::parser::{Ast, AstNode, BinOp, BinOpKind};
+use crate::parser::{Ast, AstNode, BinOp, BinOpKind, UniOp, UniOpKind};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Compiler;
@@ -27,11 +27,19 @@ impl Compiler {
         match expr.value {
             AstNode::Num(num) => {
                 self.compile_num(num, inss);
-            },
-            AstNode::BinOp { ref op, ref l, ref r } => {
+            }
+            AstNode::BinOp {
+                ref op,
+                ref l,
+                ref r,
+            } => {
                 self.compile_expr(l, inss);
                 self.compile_expr(r, inss);
                 self.compile_binop(op, inss);
+            }
+            AstNode::UniOp { ref op, ref e } => {
+                self.compile_expr(e, inss);
+                self.compile_uniop(op, inss);
             }
         }
     }
@@ -53,5 +61,17 @@ impl Compiler {
             }
         };
         inss.push(Ins::PUSH(Opr::Direct(Reg::RAX)));
+    }
+
+    fn compile_uniop(&mut self, uniop: &UniOp, inss: &mut Vec<Ins>) {
+        match uniop.value {
+            UniOpKind::Positive => {}
+            UniOpKind::Negative => {
+                inss.push(Ins::POP(Opr::Direct(Reg::RDI)));
+                inss.push(Ins::MOV(Opr::Direct(Reg::RAX), Opr::Literal(0)));
+                inss.push(Ins::SUB(Opr::Direct(Reg::RAX), Opr::Direct(Reg::RDI)));
+                inss.push(Ins::PUSH(Opr::Direct(Reg::RAX)));
+            }
+        };
     }
 }
