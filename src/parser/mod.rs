@@ -167,8 +167,8 @@ where
 
     while let Some(token) = tokens.peek() {
         let op = match token.value {
-            TokenKind::Asterisk => BinOp::add(tokens.next().unwrap().loc),
-            TokenKind::Slash => BinOp::sub(tokens.next().unwrap().loc),
+            TokenKind::Asterisk => BinOp::mul(tokens.next().unwrap().loc),
+            TokenKind::Slash => BinOp::div(tokens.next().unwrap().loc),
             _ => break,
         };
         let r = parse_term(tokens)?;

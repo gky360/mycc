@@ -8,10 +8,11 @@ use std::path::PathBuf;
 use std::{fs, io, result};
 use structopt::StructOpt;
 
-use crate::asm::{Assembly, Ent, Function, Ins};
+use crate::compiler::Compiler;
 use crate::parser::{Ast, ParseError};
 
 pub mod asm;
+pub mod compiler;
 pub mod lexer;
 pub mod parser;
 
@@ -53,26 +54,19 @@ pub struct Opt {
 
 
 pub fn run(opt: &Opt) -> Result<()> {
-    use asm::Opr::*;
-    use asm::Reg::*;
-
     debug!("{:?}", opt);
 
+    // read input file
     let source = fs::read_to_string(&opt.input)?;
+
+    // parse to generate AST
     let ast: Ast = source.parse()?;
-    debug!("{:#?}", ast);
 
-    let mut instructions = Vec::new();
-    instructions.push(Ins::RET);
+    // compile to generate assembly
+    let mut compiler = Compiler::new();
+    let assembly = compiler.compile(&ast);
 
-    let fn_main = Function::new("main", instructions);
-    let assembly = Assembly::new(vec![
-        Ent::dot("intel_syntax", "noprefix"),
-        Ent::dot("global", "main"),
-        Ent::Empty,
-        Ent::Fun(fn_main),
-    ]);
-
+    // output assembly to .s file
     let mut out = io::BufWriter::new(fs::File::create(&opt.output)?);
     write!(out, "{}", assembly)?;
     out.flush()?;

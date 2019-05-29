@@ -79,7 +79,12 @@ impl fmt::Display for Function {
 pub enum Ins {
     ADD(Opr, Opr),
     CALL(String),
+    CQO,
+    IDIV(Opr),
+    IMUL(Opr),
     MOV(Opr, Opr),
+    POP(Opr),
+    PUSH(Opr),
     SUB(Opr, Opr),
     RET,
 }
@@ -96,8 +101,13 @@ impl fmt::Display for Ins {
         use Ins::*;
         match self {
             ADD(opr1, opr2) => write!(f, "add {}, {}", opr1, opr2),
+            CQO => write!(f, "cqo"),
             CALL(name) => write!(f, "call {}", name),
+            IDIV(opr) => write!(f, "idiv {}", opr),
+            IMUL(opr) => write!(f, "imul {}", opr),
             MOV(opr1, opr2) => write!(f, "mov {}, {}", opr1, opr2),
+            POP(opr) => write!(f, "pop {}", opr),
+            PUSH(opr) => write!(f, "push {}", opr),
             SUB(opr1, opr2) => write!(f, "sub {}, {}", opr1, opr2),
             RET => write!(f, "ret"),
         }
