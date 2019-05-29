@@ -34,3 +34,12 @@ fn step_04_basic_arithmetics() {
         assert_exit_status("step_04/basic_arithmetics_03.c", &[], 4);
     });
 }
+
+#[test]
+fn step_05_unary_operator() {
+    run_test(|| {
+        assert_exit_status("step_05/unary_operator_01.c", &[], -3);
+        assert_exit_status("step_05/unary_operator_02.c", &[], -8);
+        assert_exit_status("step_05/unary_operator_03.c", &[], -15);
+    });
+}
