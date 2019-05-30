@@ -85,6 +85,18 @@ pub enum TokenKind {
     LParen,
     /// )
     RParen,
+    /// ==
+    Eq,
+    /// !=
+    Ne,
+    /// <
+    Lt,
+    /// <=
+    Le,
+    /// >
+    Gt,
+    /// >=
+    Ge,
 }
 
 impl fmt::Display for TokenKind {
@@ -98,6 +110,12 @@ impl fmt::Display for TokenKind {
             Slash => write!(f, "/"),
             LParen => write!(f, "("),
             RParen => write!(f, ")"),
+            Eq => write!(f, "=="),
+            Ne => write!(f, "!="),
+            Lt => write!(f, "<"),
+            Le => write!(f, "<="),
+            Gt => write!(f, ">"),
+            Ge => write!(f, ">="),
         }
     }
 }
@@ -125,6 +143,24 @@ impl Token {
     }
     pub fn rparen(loc: Loc) -> Self {
         Self::new(TokenKind::RParen, loc)
+    }
+    pub fn eq(loc: Loc) -> Self {
+        Self::new(TokenKind::Eq, loc)
+    }
+    pub fn ne(loc: Loc) -> Self {
+        Self::new(TokenKind::Ne, loc)
+    }
+    pub fn lt(loc: Loc) -> Self {
+        Self::new(TokenKind::Lt, loc)
+    }
+    pub fn le(loc: Loc) -> Self {
+        Self::new(TokenKind::Le, loc)
+    }
+    pub fn gt(loc: Loc) -> Self {
+        Self::new(TokenKind::Gt, loc)
+    }
+    pub fn ge(loc: Loc) -> Self {
+        Self::new(TokenKind::Ge, loc)
     }
 }
 
@@ -166,6 +202,10 @@ impl<'a> Lexer<'a> {
                 b'/' => lex_a_token!(self.lex_slash()),
                 b'(' => lex_a_token!(self.lex_lparen()),
                 b')' => lex_a_token!(self.lex_rparen()),
+                b'=' => lex_a_token!(self.lex_eq()),
+                b'!' => lex_a_token!(self.lex_ne()),
+                b'<' => lex_a_token!(self.lex_lt_or_le()),
+                b'>' => lex_a_token!(self.lex_gt_or_ge()),
                 b' ' | b'\n' | b'\t' => self.skip_spaces()?,
                 b => return Err(LexError::invalid_char(b as char, Loc(pos, pos + 1))),
             }
