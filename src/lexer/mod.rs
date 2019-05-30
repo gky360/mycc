@@ -263,6 +263,30 @@ impl<'a> Lexer<'a> {
         self.consume_byte(b')')
             .map(|(_, end)| Token::rparen(Loc(end - 1, end)))
     }
+    fn lex_eq(&self) -> Result<Token> {
+        self.consume_byte(b'=')?;
+        self.consume_byte(b'=')
+            .map(|(_, end)| Token::eq(Loc(end - 2, end)))
+    }
+    fn lex_ne(&self) -> Result<Token> {
+        self.consume_byte(b'!')?;
+        self.consume_byte(b'=')
+            .map(|(_, end)| Token::ne(Loc(end - 2, end)))
+    }
+    fn lex_lt_or_le(&self) -> Result<Token> {
+        let (_, end) = self.consume_byte(b'<')?;
+        match self.consume_byte(b'=') {
+            Ok((_, end)) => Ok(Token::le(Loc(end - 2, end))),
+            Err(_) => Ok(Token::lt(Loc(end - 1, end))),
+        }
+    }
+    fn lex_gt_or_ge(&self) -> Result<Token> {
+        let (_, end) = self.consume_byte(b'>')?;
+        match self.consume_byte(b'=') {
+            Ok((_, end)) => Ok(Token::le(Loc(end - 2, end))),
+            Err(_) => Ok(Token::lt(Loc(end - 1, end))),
+        }
+    }
 
     fn lex_number(&self) -> Result<Token> {
         let start = *self.pos.borrow();
