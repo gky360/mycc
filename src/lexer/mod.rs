@@ -1,9 +1,9 @@
 use std::cell::RefCell;
 use std::cmp::{max, min};
-use std::fmt;
+
 use std::ops::FnMut;
 use std::str::from_utf8;
-
+use std::{fmt, io};
 pub type Result<T> = std::result::Result<T, LexError>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -25,6 +25,10 @@ impl LexError {
     fn eof(loc: Loc) -> Self {
         LexError::new(LexErrorKind::Eof, loc)
     }
+
+    pub fn loc(&self) -> &Loc {
+        &self.0.loc
+    }
 }
 
 impl fmt::Display for LexError {
@@ -45,7 +49,7 @@ impl Loc {
         Loc(min(self.0, other.0), max(self.1, other.1))
     }
 
-    pub fn annotate(&self, f: &mut fmt::Formatter, input: &str) -> fmt::Result {
+    pub fn annotate<T: io::Write>(&self, f: &mut T, input: &str) -> io::Result<()> {
         writeln!(f, "{}", input)?;
         writeln!(f, "{}{}", " ".repeat(self.0), "^".repeat(self.1 - self.0))
     }
@@ -283,8 +287,8 @@ impl<'a> Lexer<'a> {
     fn lex_gt_or_ge(&self) -> Result<Token> {
         let (_, end) = self.consume_byte(b'>')?;
         match self.consume_byte(b'=') {
-            Ok((_, end)) => Ok(Token::le(Loc(end - 2, end))),
-            Err(_) => Ok(Token::lt(Loc(end - 1, end))),
+            Ok((_, end)) => Ok(Token::ge(Loc(end - 2, end))),
+            Err(_) => Ok(Token::gt(Loc(end - 1, end))),
         }
     }
 

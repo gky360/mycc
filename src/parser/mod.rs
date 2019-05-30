@@ -1,6 +1,8 @@
-use std::fmt;
+use failure::Fail;
 use std::iter::Peekable;
 use std::str::FromStr;
+use std::{fmt, io};
+
 
 use super::lexer::{Annot, LexError, Lexer, Loc, Token, TokenKind};
 
@@ -15,6 +17,30 @@ pub enum ParseError {
     UnclosedOpenParen(Token),
     RedundantExpression(Token),
     Eof,
+}
+
+impl ParseError {
+    pub fn show_diagnostic(&self, input: &str) {
+        use self::ParseError::*;
+        let temp_loc;
+        let loc = match self {
+            Lex(err) => err.loc(),
+            UnexpectedToken(Token { ref loc, .. })
+            | NotExpression(Token { ref loc, .. })
+            | NotOperator(Token { ref loc, .. })
+            | UnclosedOpenParen(Token { ref loc, .. }) => loc,
+            RedundantExpression(Token { loc, .. }) => {
+                temp_loc = Loc(loc.0, input.len());
+                &temp_loc
+            }
+            Eof => {
+                temp_loc = Loc(input.len(), input.len() + 1);
+                &temp_loc
+            }
+        };
+        loc.annotate(&mut io::stderr(), input)
+            .expect("failed to output error message.");
+    }
 }
 
 impl From<LexError> for ParseError {

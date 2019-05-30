@@ -15,7 +15,6 @@ fn main() {
     process::exit(match result {
         Ok(()) => 0,
         Err(err) => {
-            eprintln!("{}", err);
             debug!("{:?}", err);
             1
         }

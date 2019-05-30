@@ -3,6 +3,7 @@ extern crate failure;
 #[macro_use]
 extern crate log;
 
+use failure::Fail;
 use std::io::Write;
 use std::path::PathBuf;
 use std::{fs, io, result};
@@ -26,6 +27,18 @@ pub enum Error {
     Parse(#[fail(cause)] ParseError),
     #[fail(display = "Unknown Error")]
     Unknown,
+}
+
+impl Error {
+    pub fn show_trace(&self) {
+        let indent = "    ";
+        eprintln!("{}", self);
+        let err: &Fail = self;
+        for (i, err) in err.iter_causes().enumerate() {
+            eprintln!("{}caused by:", indent.repeat(i));
+            eprintln!("{}{}", indent.repeat(i + 1), err);
+        }
+    }
 }
 
 impl From<io::Error> for Error {
@@ -52,15 +65,18 @@ pub struct Opt {
     pub input: PathBuf,
 }
 
-
-pub fn run(opt: &Opt) -> Result<()> {
-    debug!("{:?}", opt);
-
+fn run_inner(opt: &Opt) -> Result<()> {
     // read input file
     let source = fs::read_to_string(&opt.input)?;
 
     // parse to generate AST
-    let ast: Ast = source.parse()?;
+    let ast: Ast = match source.parse() {
+        Err(err) => {
+            (&err as &ParseError).show_diagnostic(&source);
+            return Err(Error::Parse(err));
+        }
+        Ok(ast) => ast,
+    };
 
     // compile to generate assembly
     let mut compiler = Compiler::new();
@@ -72,4 +88,18 @@ pub fn run(opt: &Opt) -> Result<()> {
     out.flush()?;
 
     Ok(())
+}
+
+pub fn run(opt: &Opt) -> Result<()> {
+    debug!("{:?}", opt);
+
+    let ret = run_inner(opt);
+
+    match &ret {
+        Err(err) => {
+            err.show_trace();
+        },
+        Ok(_)=>{}
+    };
+    ret
 }
