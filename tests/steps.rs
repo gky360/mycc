@@ -43,3 +43,14 @@ fn step_05_unary_operator() {
         assert_exit_status("step_05/unary_operator_03.c", &[], 256 - 15);
     });
 }
+
+#[test]
+fn step_06_relational_operator() {
+    run_test(|| {
+        assert_exit_status("step_06/relational_operator_01.c", &[], 0);
+        assert_exit_status("step_06/relational_operator_02.c", &[], 0);
+        assert_exit_status("step_06/relational_operator_03.c", &[], 0);
+        assert_exit_status("step_06/relational_operator_04.c", &[], 0);
+        assert_exit_status("step_06/relational_operator_05.c", &[], 1);
+    });
+}
