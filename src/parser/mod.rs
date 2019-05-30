@@ -158,10 +158,13 @@ impl UniOp {
 
 /// Parse tokens with following rules
 ///
-/// expr  = mul ("+" mul | "-" mul)*
-/// mul   = unary ("*" unary | "/" unary)*
-/// unary = ("+" | "-")? term
-/// term  = num | "(" expr ")"
+/// expr       = equality
+/// equality   = relational ("==" relational | "!=" relational)*
+/// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
+/// add        = mul ("+" mul | "-" mul)*
+/// mul        = unary ("*" unary | "/" unary)*
+/// unary      = ("+" | "-")? term
+/// term       = num | "(" expr ")"
 fn parse(tokens: Vec<Token>) -> Result<Ast> {
     debug!("parse --");
 
