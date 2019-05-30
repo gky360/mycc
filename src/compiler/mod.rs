@@ -67,6 +67,7 @@ impl Compiler {
         match uniop.value {
             UniOpKind::Positive => {}
             UniOpKind::Negative => {
+                // consider -x as 0 - x
                 inss.push(Ins::POP(Opr::Direct(Reg::RDI)));
                 inss.push(Ins::MOV(Opr::Direct(Reg::RAX), Opr::Literal(0)));
                 inss.push(Ins::SUB(Opr::Direct(Reg::RAX), Opr::Direct(Reg::RDI)));
