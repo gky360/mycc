@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::{fs, io, result};
 use structopt::StructOpt;
 
-use crate::compiler::Compiler;
+use crate::compiler::{Compiler, CompileError};
 use crate::parser::{Ast, ParseError};
 
 pub mod asm;
@@ -25,6 +25,8 @@ pub enum Error {
     Io(#[fail(cause)] io::Error),
     #[fail(display = "ParseError")]
     Parse(#[fail(cause)] ParseError),
+    #[fail(display = "CompileError")]
+    Compile(#[fail(cause)] CompileError),
     #[fail(display = "Unknown Error")]
     Unknown,
 }
@@ -50,6 +52,12 @@ impl From<io::Error> for Error {
 impl From<ParseError> for Error {
     fn from(err: ParseError) -> Error {
         Error::Parse(err)
+    }
+}
+
+impl From<CompileError> for Error {
+    fn from(err: CompileError) -> Error {
+        Error::Compile(err)
     }
 }
 
@@ -80,7 +88,7 @@ fn run_inner(opt: &Opt) -> Result<()> {
 
     // compile to generate assembly
     let mut compiler = Compiler::new();
-    let assembly = compiler.compile(&ast);
+    let assembly = compiler.compile(&ast)?;
 
     // output assembly to .s file
     let mut out = io::BufWriter::new(fs::File::create(&opt.output)?);

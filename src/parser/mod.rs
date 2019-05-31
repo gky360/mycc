@@ -19,6 +19,7 @@ pub enum ParseError {
     NotOperator(Token),
     UnclosedOpenParen(Token),
     RedundantExpression(Token),
+    NeedTokenBefore(Token, Vec<TokenKind>),
     Eof,
 }
 
@@ -31,7 +32,8 @@ impl ParseError {
             UnexpectedToken(Token { ref loc, .. })
             | NotExpression(Token { ref loc, .. })
             | NotOperator(Token { ref loc, .. })
-            | UnclosedOpenParen(Token { ref loc, .. }) => loc,
+            | UnclosedOpenParen(Token { ref loc, .. })
+            | NeedTokenBefore(Token { ref loc, .. }, _) => loc,
             RedundantExpression(Token { loc, .. }) => {
                 temp_loc = Loc(loc.0, input.len());
                 &temp_loc
@@ -72,7 +74,35 @@ impl fmt::Display for ParseError {
                 "{}: expression after '{}' is redundant",
                 token.loc, token.value
             ),
-            Eof => write!(f, "End of file"),
+            NeedTokenBefore(token, expected) => {
+                let len = expected.len();
+                match len {
+                    1 => write!(
+                        f,
+                        "{}: expected '{}' before '{}' token",
+                        token.loc, expected[0], token.value
+                    ),
+                    2 => write!(
+                        f,
+                        "{}: expected '{}' or '{}' before '{}' token",
+                        token.loc, expected[0], expected[1], token.value
+                    ),
+                    _ => {
+                        write!(f, "{}: expected one of ", token.loc)?;
+                        for kind in &expected[..len - 1] {
+                            write!(f, "'{}', ", kind)?;
+                        }
+                        write!(
+                            f,
+                            "or '{}' before '{}' token",
+                            expected[len - 1],
+                            token.value
+                        )
+                    }
+
+                }
+            }
+            Eof => write!(f, "unexpected end of file"),
         }
     }
 }
@@ -81,8 +111,10 @@ impl fmt::Display for ParseError {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AstNode {
     Num(u64),
+    Ident(String),
     BinOp { op: BinOp, l: Box<Ast>, r: Box<Ast> },
     UniOp { op: UniOp, e: Box<Ast> },
+    Statements(Vec<Ast>),
 }
 
 pub type Ast = Annot<AstNode>;
@@ -91,6 +123,9 @@ impl Ast {
     fn num(n: u64, loc: Loc) -> Self {
         // call Annot::new
         Self::new(AstNode::Num(n), loc)
+    }
+    fn ident(name: String, loc: Loc) -> Self {
+        Self::new(AstNode::Ident(name), loc)
     }
     fn binop(op: BinOp, l: Ast, r: Ast, loc: Loc) -> Self {
         Self::new(
@@ -104,6 +139,9 @@ impl Ast {
     }
     fn uniop(op: UniOp, e: Ast, loc: Loc) -> Self {
         Self::new(AstNode::UniOp { op, e: Box::new(e) }, loc)
+    }
+    fn statements(stmts: Vec<Ast>, loc: Loc) -> Self {
+        Self::new(AstNode::Statements(stmts), loc)
     }
 }
 
@@ -119,6 +157,7 @@ impl FromStr for Ast {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BinOpKind {
+    Assign,
     Add,
     Sub,
     Mul,
@@ -134,6 +173,9 @@ pub enum BinOpKind {
 pub type BinOp = Annot<BinOpKind>;
 
 impl BinOp {
+    fn assign(loc: Loc) -> Self {
+        Self::new(BinOpKind::Assign, loc)
+    }
     fn add(loc: Loc) -> Self {
         Self::new(BinOpKind::Add, loc)
     }
@@ -187,18 +229,21 @@ impl UniOp {
 
 /// Parse tokens with following rules
 ///
-/// expr       = equality
+/// program    = stmt*
+/// stmt       = expr ";"
+/// expr       = assign
+/// assign     = equality ("=" assign)?
 /// equality   = relational ("==" relational | "!=" relational)*
 /// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
 /// add        = mul ("+" mul | "-" mul)*
 /// mul        = unary ("*" unary | "/" unary)*
 /// unary      = ("+" | "-")? term
-/// term       = num | "(" expr ")"
+/// term       = num | ident | "(" expr ")"
 fn parse(tokens: Vec<Token>) -> Result<Ast> {
     debug!("parse --");
 
     let mut tokens = tokens.into_iter().peekable();
-    let ret = parse_expr(&mut tokens)?;
+    let ret = parse_program(&mut tokens)?;
     let ret = match tokens.next() {
         Some(token) => Err(ParseError::RedundantExpression(token)),
         None => Ok(ret),
@@ -208,18 +253,95 @@ fn parse(tokens: Vec<Token>) -> Result<Ast> {
     ret
 }
 
+/// Parse program
+///
+/// program    = stmt*
+fn parse_program<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_program --");
+
+    let stmt = parse_stmt(tokens)?;
+    let mut loc = stmt.loc.clone();
+    let mut stmts = vec![stmt];
+    while let Some(_) = tokens.peek() {
+        let stmt = parse_stmt(tokens)?;
+        loc = loc.merge(&stmt.loc);
+        stmts.push(stmt);
+    }
+    let ret = Ok(Ast::statements(stmts, loc));
+
+    debug!("parse_program: {:?}", ret);
+    ret
+}
+
+/// Parse stmt
+///
+/// stmt       = expr ";"
+fn parse_stmt<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_stmt --");
+
+    let e = parse_expr(tokens)?;
+    let ret = match tokens.next() {
+        Some(Token {
+            value: TokenKind::Semicolon,
+            loc,
+        }) => Ok(Ast::new(e.value, e.loc.merge(&loc))),
+        Some(token) => Err(ParseError::NeedTokenBefore(
+            token,
+            vec![TokenKind::Semicolon],
+        )),
+        None => Err(ParseError::Eof),
+    };
+
+    debug!("parse_stmt: {:?}", ret);
+    ret
+}
+
 /// Parse expr
 ///
-/// expr       = equality
+/// expr       = assign
 fn parse_expr<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
     debug!("parse_expr --");
 
-    let ret = parse_equality(tokens);
+    let ret = parse_assign(tokens);
 
     debug!("parse_expr: {:?}", ret);
+    ret
+}
+
+/// Parse assign
+///
+/// assign     = equality ("=" assign)?
+fn parse_assign<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_assign --");
+
+    let e = parse_equality(tokens)?;
+
+    let ret = match tokens.peek() {
+        Some(Token {
+            value: TokenKind::Assign,
+            ..
+        }) => {
+            let op = BinOp::assign(tokens.next().unwrap().loc);
+            let r = parse_assign(tokens)?;
+            let loc = e.loc.merge(&r.loc);
+            Ok(Ast::binop(op, e, r, loc))
+        }
+        _ => Ok(e),
+    };
+
+    debug!("parse_assign: {:?}", ret);
     ret
 }
 
@@ -368,7 +490,7 @@ where
 
 /// Parse term
 ///
-/// term       = num | "(" expr ")"
+/// term       = num | ident | "(" expr ")"
 fn parse_term<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -378,6 +500,7 @@ where
     let token = tokens.next().ok_or(ParseError::Eof)?;
     let ret = match token.value {
         TokenKind::Number(n) => Ok(Ast::num(n, token.loc)),
+        TokenKind::Ident(name) => Ok(Ast::ident(name, token.loc)),
         TokenKind::LParen => {
             let e = parse_expr(tokens)?;
             match tokens.next() {

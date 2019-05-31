@@ -125,6 +125,7 @@ impl fmt::Display for Ins {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Opr {
     Direct(Reg),
+    Indirect(Reg),
     Literal(u64),
 }
 
@@ -133,6 +134,7 @@ impl fmt::Display for Opr {
         use Opr::*;
         match self {
             Direct(reg) => write!(f, "{}", reg),
+            Indirect(reg) => write!(f, "[{}]", reg),
             Literal(l) => write!(f, "{}", l),
         }
     }
@@ -169,6 +171,8 @@ pub enum Reg {
     RBX,
     RCX,
     RDX,
+    RBP,
+    RSP,
     RSI,
     RDI,
 }
@@ -182,6 +186,8 @@ impl fmt::Display for Reg {
             RBX => write!(f, "rbx"),
             RCX => write!(f, "rcx"),
             RDX => write!(f, "rdx"),
+            RBP => write!(f, "rbp"),
+            RSP => write!(f, "rsp"),
             RSI => write!(f, "rsi"),
             RDI => write!(f, "rdi"),
         }

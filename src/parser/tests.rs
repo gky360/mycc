@@ -14,11 +14,6 @@ fn test_step_06_invalid() {
 #[test]
 fn test_step_09_single_char_variable() {
     let sources = vec![
-        // syntax_err_bad_lvalue
-        r##"
-a = 2;
-a + 3 = 4;
-"##,
         // syntax_err_no_semicolon
         r##"
 a = 2
