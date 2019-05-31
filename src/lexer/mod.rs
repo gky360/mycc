@@ -1,9 +1,9 @@
 use std::cell::RefCell;
 use std::cmp::{max, min};
-
+use std::fmt;
 use std::ops::FnMut;
 use std::str::from_utf8;
-use std::{fmt, io};
+
 pub type Result<T> = std::result::Result<T, LexError>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -49,9 +49,31 @@ impl Loc {
         Loc(min(self.0, other.0), max(self.1, other.1))
     }
 
-    pub fn annotate<T: io::Write>(&self, f: &mut T, input: &str) -> io::Result<()> {
-        writeln!(f, "{}", input)?;
-        writeln!(f, "{}{}", " ".repeat(self.0), "^".repeat(self.1 - self.0))
+    pub fn annotate<T: fmt::Write>(&self, f: &mut T, input: &str) -> fmt::Result {
+        let mut c = input.lines().count();
+        let mut digits = 0;
+        while c > 0 {
+            digits += 1;
+            c /= 10;
+        }
+        let mut sum_len = 0;
+        for (i, line) in input.lines().enumerate() {
+            let line_len = line.len() + 1; // take '\n' into account
+            if self.0 < sum_len + line_len && sum_len < self.1 {
+                writeln!(f, "{:>width$} | {}", i + 1, line, width = digits)?;
+                let start = max(0, self.0 as i32 - sum_len as i32) as usize;
+                writeln!(
+                    f,
+                    "{:>width$} | {}{}",
+                    "",
+                    " ".repeat(start),
+                    "^".repeat(min(line_len, self.1 - sum_len) - start),
+                    width = digits
+                )?;
+            }
+            sum_len += line_len;
+        }
+        Ok(())
     }
 }
 
@@ -310,6 +332,29 @@ impl<'a> Lexer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_annotate() {
+        let input = r##"
+a = 2
+a = a + 4;
+b = 3 + a;
+c = 3 + b;
+"##;
+        let loc = Loc(3, 21);
+        let mut annotated = String::new();
+        assert!(loc.annotate(&mut annotated, &input).is_ok());
+        assert_eq!(
+            annotated,
+            r##"2 | a = 2
+  |   ^^^^
+3 | a = a + 4;
+  | ^^^^^^^^^^^
+4 | b = 3 + a;
+  | ^^^
+"##
+        );
+    }
 
     #[test]
     fn test_lexer() {

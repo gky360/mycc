@@ -1,4 +1,5 @@
 use failure::Fail;
+use std::io::Write;
 use std::iter::Peekable;
 use std::str::FromStr;
 use std::{fmt, io};
@@ -40,8 +41,10 @@ impl ParseError {
                 &temp_loc
             }
         };
-        loc.annotate(&mut io::stderr(), input)
-            .expect("failed to output error message.");
+        let mut message = String::new();
+        loc.annotate(&mut message, input)
+            .expect("failed to generate error message.");
+        write!(io::stderr(), "{}", message).expect("failed to output error message.");
     }
 }
 
