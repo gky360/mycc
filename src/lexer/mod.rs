@@ -95,10 +95,12 @@ impl<T> Annot<T> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenKind {
     /// [0-9]+
     Number(u64),
+    /// identifier
+    Ident(String),
     /// +
     Plus,
     /// -
@@ -111,6 +113,10 @@ pub enum TokenKind {
     LParen,
     /// )
     RParen,
+    /// ;
+    Semicolon,
+    /// =
+    Assign,
     /// ==
     Eq,
     /// !=
@@ -130,12 +136,15 @@ impl fmt::Display for TokenKind {
         use self::TokenKind::*;
         match self {
             Number(n) => n.fmt(f),
+            Ident(ref name) => name.fmt(f),
             Plus => write!(f, "+"),
             Minus => write!(f, "-"),
             Asterisk => write!(f, "*"),
             Slash => write!(f, "/"),
             LParen => write!(f, "("),
             RParen => write!(f, ")"),
+            Semicolon => write!(f, ";"),
+            Assign => write!(f, "="),
             Eq => write!(f, "=="),
             Ne => write!(f, "!="),
             Lt => write!(f, "<"),
@@ -151,6 +160,9 @@ pub type Token = Annot<TokenKind>;
 impl Token {
     pub fn number(n: u64, loc: Loc) -> Self {
         Self::new(TokenKind::Number(n), loc)
+    }
+    pub fn ident(name: &str, loc: Loc) -> Self {
+        Self::new(TokenKind::Ident(String::from(name)), loc)
     }
     pub fn plus(loc: Loc) -> Self {
         Self::new(TokenKind::Plus, loc)
@@ -169,6 +181,12 @@ impl Token {
     }
     pub fn rparen(loc: Loc) -> Self {
         Self::new(TokenKind::RParen, loc)
+    }
+    pub fn semicolon(loc: Loc) -> Self {
+        Self::new(TokenKind::Semicolon, loc)
+    }
+    pub fn assign(loc: Loc) -> Self {
+        Self::new(TokenKind::Assign, loc)
     }
     pub fn eq(loc: Loc) -> Self {
         Self::new(TokenKind::Eq, loc)
@@ -222,13 +240,15 @@ impl<'a> Lexer<'a> {
 
             match self.input[pos] {
                 b'0'...b'9' => lex_a_token!(self.lex_number()),
+                b'a'...b'z' => lex_a_token!(self.lex_ident()),
                 b'+' => lex_a_token!(self.lex_plus()),
                 b'-' => lex_a_token!(self.lex_minus()),
                 b'*' => lex_a_token!(self.lex_asterisk()),
                 b'/' => lex_a_token!(self.lex_slash()),
                 b'(' => lex_a_token!(self.lex_lparen()),
                 b')' => lex_a_token!(self.lex_rparen()),
-                b'=' => lex_a_token!(self.lex_eq()),
+                b';' => lex_a_token!(self.lex_semicolon()),
+                b'=' => lex_a_token!(self.lex_assign_or_eq()),
                 b'!' => lex_a_token!(self.lex_ne()),
                 b'<' => lex_a_token!(self.lex_lt_or_le()),
                 b'>' => lex_a_token!(self.lex_gt_or_ge()),
@@ -265,6 +285,28 @@ impl<'a> Lexer<'a> {
         *pos
     }
 
+    fn lex_number(&self) -> Result<Token> {
+        let start = *self.pos.borrow();
+        let end = self.recognize_many(|b| b"0123456789".contains(&b));
+
+        let n = from_utf8(&self.input[start..end]).unwrap().parse().unwrap();
+        Ok(Token::number(n, Loc(start, end)))
+    }
+
+    fn lex_ident(&self) -> Result<Token> {
+        let start = *self.pos.borrow();
+        let end = self.recognize_many(|b| b'a' <= b && b <= b'z');
+        if end - start != 1 {
+            return Err(LexError::invalid_char(
+                self.input[start] as char,
+                Loc(start, end),
+            ));
+        }
+
+        let name = from_utf8(&self.input[start..end]).unwrap();
+        Ok(Token::ident(name, Loc(start, end)))
+    }
+
     fn lex_plus(&self) -> Result<Token> {
         self.consume_byte(b'+')
             .map(|(_, end)| Token::plus(Loc(end - 1, end)))
@@ -289,10 +331,16 @@ impl<'a> Lexer<'a> {
         self.consume_byte(b')')
             .map(|(_, end)| Token::rparen(Loc(end - 1, end)))
     }
-    fn lex_eq(&self) -> Result<Token> {
-        self.consume_byte(b'=')?;
-        self.consume_byte(b'=')
-            .map(|(_, end)| Token::eq(Loc(end - 2, end)))
+    fn lex_semicolon(&self) -> Result<Token> {
+        self.consume_byte(b';')
+            .map(|(_, end)| Token::semicolon(Loc(end - 1, end)))
+    }
+    fn lex_assign_or_eq(&self) -> Result<Token> {
+        let (_, end) = self.consume_byte(b'=')?;
+        match self.consume_byte(b'=') {
+            Ok((_, end)) => Ok(Token::eq(Loc(end - 2, end))),
+            Err(_) => Ok(Token::assign(Loc(end - 1, end))),
+        }
     }
     fn lex_ne(&self) -> Result<Token> {
         self.consume_byte(b'!')?;
@@ -312,15 +360,6 @@ impl<'a> Lexer<'a> {
             Ok((_, end)) => Ok(Token::ge(Loc(end - 2, end))),
             Err(_) => Ok(Token::gt(Loc(end - 1, end))),
         }
-    }
-
-    fn lex_number(&self) -> Result<Token> {
-        let start = *self.pos.borrow();
-        let end = self.recognize_many(|b| b"0123456789".contains(&b));
-
-        let n = from_utf8(&self.input[start..end]).unwrap().parse().unwrap();
-
-        Ok(Token::number(n, Loc(start, end)))
     }
 
     fn skip_spaces(&self) -> Result<()> {

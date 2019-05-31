@@ -342,7 +342,7 @@ where
 {
     debug!("parse_unary --");
 
-    let ret = match tokens.peek().map(|token| token.value) {
+    let ret = match tokens.peek().map(|token| &token.value) {
         Some(TokenKind::Plus) | Some(TokenKind::Minus) => {
             let op = match tokens.next().unwrap() {
                 Token {
