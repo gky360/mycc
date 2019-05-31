@@ -54,3 +54,10 @@ fn step_06_relational_operator() {
         assert_exit_status("step_06/relational_operator_05.c", &[], 0);
     });
 }
+
+#[test]
+fn step_09_single_char_varibale() {
+    run_test(|| {
+        assert_exit_status("step_09/single_char_variable.c", &[], 14);
+    });
+}
