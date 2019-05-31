@@ -3,8 +3,10 @@ use std::iter::Peekable;
 use std::str::FromStr;
 use std::{fmt, io};
 
-
 use super::lexer::{Annot, LexError, Lexer, Loc, Token, TokenKind};
+
+#[cfg(test)]
+mod tests;
 
 pub type Result<T> = std::result::Result<T, ParseError>;
 
@@ -118,6 +120,12 @@ pub enum BinOpKind {
     Sub,
     Mul,
     Div,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
 }
 
 pub type BinOp = Annot<BinOpKind>;
@@ -134,6 +142,24 @@ impl BinOp {
     }
     fn div(loc: Loc) -> Self {
         Self::new(BinOpKind::Div, loc)
+    }
+    fn eq(loc: Loc) -> Self {
+        Self::new(BinOpKind::Eq, loc)
+    }
+    fn ne(loc: Loc) -> Self {
+        Self::new(BinOpKind::Ne, loc)
+    }
+    fn lt(loc: Loc) -> Self {
+        Self::new(BinOpKind::Lt, loc)
+    }
+    fn le(loc: Loc) -> Self {
+        Self::new(BinOpKind::Le, loc)
+    }
+    fn gt(loc: Loc) -> Self {
+        Self::new(BinOpKind::Gt, loc)
+    }
+    fn ge(loc: Loc) -> Self {
+        Self::new(BinOpKind::Ge, loc)
     }
 }
 
@@ -181,12 +207,83 @@ fn parse(tokens: Vec<Token>) -> Result<Ast> {
 
 /// Parse expr
 ///
-/// expr = mul ("+" mul | "-" mul)*
+/// expr       = equality
 fn parse_expr<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
     debug!("parse_expr --");
+
+    let ret = parse_equality(tokens);
+
+    debug!("parse_expr: {:?}", ret);
+    ret
+}
+
+/// Parse equality
+///
+/// equality   = relational ("==" relational | "!=" relational)*
+fn parse_equality<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_equality --");
+
+    let mut e = parse_relational(tokens)?;
+
+    while let Some(token) = tokens.peek() {
+        let op = match token.value {
+            TokenKind::Eq => BinOp::eq(tokens.next().unwrap().loc),
+            TokenKind::Ne => BinOp::ne(tokens.next().unwrap().loc),
+            _ => break,
+        };
+        let r = parse_relational(tokens)?;
+        let loc = e.loc.merge(&r.loc);
+        e = Ast::binop(op, e, r, loc);
+    }
+
+    let ret = Ok(e);
+    debug!("parse_equality: {:?}", ret);
+    ret
+}
+
+/// Parse relational
+///
+/// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
+fn parse_relational<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_relational --");
+
+    let mut e = parse_add(tokens)?;
+
+    while let Some(token) = tokens.peek() {
+        let op = match token.value {
+            TokenKind::Lt => BinOp::lt(tokens.next().unwrap().loc),
+            TokenKind::Le => BinOp::le(tokens.next().unwrap().loc),
+            TokenKind::Gt => BinOp::gt(tokens.next().unwrap().loc),
+            TokenKind::Ge => BinOp::ge(tokens.next().unwrap().loc),
+            _ => break,
+        };
+        let r = parse_add(tokens)?;
+        let loc = e.loc.merge(&r.loc);
+        e = Ast::binop(op, e, r, loc);
+    }
+
+    let ret = Ok(e);
+    debug!("parse_relational: {:?}", ret);
+    ret
+}
+
+/// Parse add
+///
+/// add        = mul ("+" mul | "-" mul)*
+fn parse_add<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_add --");
 
     let mut e = parse_mul(tokens)?;
 
@@ -202,13 +299,13 @@ where
     }
 
     let ret = Ok(e);
-    debug!("parse_expr: {:?}", ret);
+    debug!("parse_add: {:?}", ret);
     ret
 }
 
 /// Parse mul
 ///
-/// mul = unary ("*" unary | "/" unary)*
+/// mul        = unary ("*" unary | "/" unary)*
 fn parse_mul<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -235,7 +332,7 @@ where
 
 /// Parse unary
 ///
-/// unary = ("+" | "-")? term
+/// unary      = ("+" | "-")? term
 fn parse_unary<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -266,9 +363,9 @@ where
     ret
 }
 
-/// Parse mul
+/// Parse term
 ///
-/// term = num | "(" expr ")"
+/// term       = num | "(" expr ")"
 fn parse_term<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,

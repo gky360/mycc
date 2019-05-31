@@ -21,7 +21,6 @@ impl fmt::Display for Assembly {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-#[allow(dead_code)]
 pub enum Ent {
     /// e.g. `.intel_syntax noprefix`
     Dot(String, String),
@@ -32,7 +31,6 @@ pub enum Ent {
     Raw(String),
 }
 
-#[allow(dead_code)]
 impl Ent {
     pub fn dot(name: &str, content: &str) -> Ent {
         Ent::Dot(String::from(name), String::from(content))
@@ -75,21 +73,25 @@ impl fmt::Display for Function {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-#[allow(dead_code)]
 pub enum Ins {
     ADD(Opr, Opr),
     CALL(String),
+    CMP(Opr, Opr),
     CQO,
     IDIV(Opr),
     IMUL(Opr),
     MOV(Opr, Opr),
+    MOVZB(Opr, Opr),
     POP(Opr),
     PUSH(Opr),
+    SETE(Opr),
+    SETL(Opr),
+    SETLE(Opr),
+    SETNE(Opr),
     SUB(Opr, Opr),
     RET,
 }
 
-#[allow(dead_code)]
 impl Ins {
     pub fn call(name: &str) -> Ins {
         Ins::CALL(String::from(name))
@@ -103,11 +105,17 @@ impl fmt::Display for Ins {
             ADD(opr1, opr2) => write!(f, "add {}, {}", opr1, opr2),
             CQO => write!(f, "cqo"),
             CALL(name) => write!(f, "call {}", name),
+            CMP(opr1, opr2) => write!(f, "cmp {}, {}", opr1, opr2),
             IDIV(opr) => write!(f, "idiv {}", opr),
             IMUL(opr) => write!(f, "imul {}", opr),
             MOV(opr1, opr2) => write!(f, "mov {}, {}", opr1, opr2),
+            MOVZB(opr1, opr2) => write!(f, "movzb {}, {}", opr1, opr2),
             POP(opr) => write!(f, "pop {}", opr),
             PUSH(opr) => write!(f, "push {}", opr),
+            SETE(opr) => write!(f, "sete {}", opr),
+            SETL(opr) => write!(f, "setl {}", opr),
+            SETLE(opr) => write!(f, "setle {}", opr),
+            SETNE(opr) => write!(f, "setne {}", opr),
             SUB(opr1, opr2) => write!(f, "sub {}, {}", opr1, opr2),
             RET => write!(f, "ret"),
         }
@@ -115,7 +123,6 @@ impl fmt::Display for Ins {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-#[allow(dead_code)]
 pub enum Opr {
     Direct(Reg),
     Literal(u64),
@@ -132,7 +139,6 @@ impl fmt::Display for Opr {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-#[allow(dead_code)]
 pub enum SegReg {
     CS,
     DS,
@@ -157,8 +163,8 @@ impl fmt::Display for SegReg {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-#[allow(dead_code)]
 pub enum Reg {
+    AL,
     RAX,
     RBX,
     RCX,
@@ -171,6 +177,7 @@ impl fmt::Display for Reg {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Reg::*;
         match self {
+            AL => write!(f, "al"),
             RAX => write!(f, "rax"),
             RBX => write!(f, "rbx"),
             RCX => write!(f, "rcx"),

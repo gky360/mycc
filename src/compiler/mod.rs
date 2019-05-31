@@ -45,22 +45,45 @@ impl Compiler {
     }
 
     fn compile_num(&mut self, num: u64, inss: &mut Vec<Ins>) {
-        inss.push(Ins::PUSH(Opr::Literal(num)));
+        use Opr::*;
+        inss.push(Ins::PUSH(Literal(num)));
     }
 
     fn compile_binop(&mut self, binop: &BinOp, inss: &mut Vec<Ins>) {
-        inss.push(Ins::POP(Opr::Direct(Reg::RDI)));
-        inss.push(Ins::POP(Opr::Direct(Reg::RAX)));
+        use Opr::*;
+        use Reg::*;
+        inss.push(Ins::POP(Direct(RDI)));
+        inss.push(Ins::POP(Direct(RAX)));
         match binop.value {
-            BinOpKind::Add => inss.push(Ins::ADD(Opr::Direct(Reg::RAX), Opr::Direct(Reg::RDI))),
-            BinOpKind::Sub => inss.push(Ins::SUB(Opr::Direct(Reg::RAX), Opr::Direct(Reg::RDI))),
-            BinOpKind::Mul => inss.push(Ins::IMUL(Opr::Direct(Reg::RDI))),
+            BinOpKind::Add => inss.push(Ins::ADD(Direct(RAX), Direct(RDI))),
+            BinOpKind::Sub => inss.push(Ins::SUB(Direct(RAX), Direct(RDI))),
+            BinOpKind::Mul => inss.push(Ins::IMUL(Direct(RDI))),
             BinOpKind::Div => {
                 inss.push(Ins::CQO);
-                inss.push(Ins::IDIV(Opr::Direct(Reg::RDI)));
+                inss.push(Ins::IDIV(Direct(RDI)));
+            }
+            BinOpKind::Eq | BinOpKind::Ne | BinOpKind::Lt | BinOpKind::Le => {
+                inss.push(Ins::CMP(Direct(RAX), Direct(RDI)));
+                match binop.value {
+                    BinOpKind::Eq => inss.push(Ins::SETE(Direct(AL))),
+                    BinOpKind::Ne => inss.push(Ins::SETNE(Direct(AL))),
+                    BinOpKind::Lt => inss.push(Ins::SETL(Direct(AL))),
+                    BinOpKind::Le => inss.push(Ins::SETLE(Direct(AL))),
+                    _ => {}
+                }
+                inss.push(Ins::MOVZB(Direct(RAX), Direct(AL)));
+            }
+            BinOpKind::Gt | BinOpKind::Ge => {
+                inss.push(Ins::CMP(Direct(RDI), Direct(RAX)));
+                match binop.value {
+                    BinOpKind::Gt => inss.push(Ins::SETL(Direct(AL))),
+                    BinOpKind::Ge => inss.push(Ins::SETLE(Direct(AL))),
+                    _ => {}
+                }
+                inss.push(Ins::MOVZB(Direct(RAX), Direct(AL)));
             }
         };
-        inss.push(Ins::PUSH(Opr::Direct(Reg::RAX)));
+        inss.push(Ins::PUSH(Direct(RAX)));
     }
 
     fn compile_uniop(&mut self, uniop: &UniOp, inss: &mut Vec<Ins>) {
