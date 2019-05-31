@@ -58,6 +58,13 @@ fn step_06_relational_operator() {
 #[test]
 fn step_09_single_char_varibale() {
     run_test(|| {
-        assert_exit_status("step_09/single_char_variable.c", &[], 14);
+        assert_exit_status("step_09/assign_val.c", &[], 0);
+        assert_exit_status("step_09/assign.c", &[], 2);
+        assert_exit_status("step_09/multiple_vars.c", &[], 3);
+        assert_exit_status("step_09/no_initialize.c", &[], 0);
+        assert_exit_status("step_09/refer.c", &[], 2);
+        assert_exit_status("step_09/unused_exp.c", &[], 0);
+
+        assert_exit_status("step_09/single_char_variable_01.c", &[], 14);
     });
 }
