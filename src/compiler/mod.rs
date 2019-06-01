@@ -95,9 +95,6 @@ impl Compiler {
     }
 
     fn compile_ast(&mut self, ast: &Ast, inss: &mut Vec<Ins>) -> Result<()> {
-        use Opr::*;
-        use Reg::*;
-
         match ast.value {
             AstNode::Num(num) => self.compile_num(num, inss)?,
             AstNode::Ident(_) => self.compile_ident(ast, inss)?,
@@ -107,12 +104,8 @@ impl Compiler {
                 ref r,
             } => self.compile_binop(op, l, r, inss)?,
             AstNode::UniOp { ref op, ref e } => self.compile_uniop(op, e, inss)?,
-            AstNode::Statements(ref stmts) => {
-                for ast in stmts {
-                    self.compile_ast(ast, inss)?;
-                    inss.push(Ins::POP(Direct(RAX)));
-                }
-            }
+            AstNode::Ret { ref e } => self.compile_ret(e, inss)?,
+            AstNode::Statements(ref stmts) => self.compile_statements(stmts, inss)?,
         };
 
         Ok(())
@@ -211,6 +204,32 @@ impl Compiler {
                 inss.push(Ins::PUSH(Opr::Direct(Reg::RAX)));
             }
         };
+
+        Ok(())
+    }
+
+    fn compile_ret(&mut self, e: &Ast, inss: &mut Vec<Ins>) -> Result<()> {
+        use Opr::*;
+        use Reg::*;
+
+        self.compile_ast(e, inss)?;
+
+        inss.push(Ins::POP(Direct(RAX)));
+        inss.push(Ins::MOV(Direct(RSP), Direct(RBP)));
+        inss.push(Ins::POP(Direct(RBP)));
+        inss.push(Ins::RET);
+
+        Ok(())
+    }
+
+    fn compile_statements(&mut self, stmts: &Vec<Ast>, inss: &mut Vec<Ins>) -> Result<()> {
+        use Opr::*;
+        use Reg::*;
+
+        for ast in stmts {
+            self.compile_ast(ast, inss)?;
+            inss.push(Ins::POP(Direct(RAX)));
+        }
 
         Ok(())
     }
