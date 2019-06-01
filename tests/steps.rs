@@ -68,3 +68,11 @@ fn step_09_single_char_varibale() {
         assert_exit_status("step_09/single_char_variable_01.c", &[], 13);
     });
 }
+
+#[test]
+fn step_10_return() {
+    run_test(|| {
+        assert_exit_status("step_10/return_01.c", &[], 14);
+        assert_exit_status("step_10/return_02.c", &[], 5);
+    });
+}
