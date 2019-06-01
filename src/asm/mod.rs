@@ -1,4 +1,5 @@
 use std::fmt;
+use strum_macros::Display;
 
 static INDENT: &str = "    ";
 
@@ -140,59 +141,60 @@ impl fmt::Display for Opr {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Display, Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum SegReg {
+    #[strum(serialize = "cs")]
     CS,
+    #[strum(serialize = "ds")]
     DS,
+    #[strum(serialize = "es")]
     ES,
+    #[strum(serialize = "fs")]
     FS,
+    #[strum(serialize = "gs")]
     GS,
+    #[strum(serialize = "ss")]
     SS,
 }
 
-impl fmt::Display for SegReg {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use SegReg::*;
-        match self {
-            CS => write!(f, "cs"),
-            DS => write!(f, "ds"),
-            ES => write!(f, "es"),
-            FS => write!(f, "fs"),
-            GS => write!(f, "gs"),
-            SS => write!(f, "ss"),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Display, Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Reg {
+    #[strum(serialize = "al")]
     AL,
+    #[strum(serialize = "rax")]
     RAX,
+    #[strum(serialize = "rbx")]
     RBX,
+    #[strum(serialize = "rcx")]
     RCX,
+    #[strum(serialize = "rdx")]
     RDX,
+    #[strum(serialize = "rbp")]
     RBP,
+    #[strum(serialize = "rsp")]
     RSP,
+    #[strum(serialize = "rsi")]
     RSI,
+    #[strum(serialize = "rdi")]
     RDI,
 }
 
-impl fmt::Display for Reg {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use Reg::*;
-        match self {
-            AL => write!(f, "al"),
-            RAX => write!(f, "rax"),
-            RBX => write!(f, "rbx"),
-            RCX => write!(f, "rcx"),
-            RDX => write!(f, "rdx"),
-            RBP => write!(f, "rbp"),
-            RSP => write!(f, "rsp"),
-            RSI => write!(f, "rsi"),
-            RDI => write!(f, "rdi"),
-        }
-    }
-}
+// impl fmt::Display for Reg {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         use Reg::*;
+//         match self {
+//             AL => write!(f, "al"),
+//             RAX => write!(f, "rax"),
+//             RBX => write!(f, "rbx"),
+//             RCX => write!(f, "rcx"),
+//             RDX => write!(f, "rdx"),
+//             RBP => write!(f, "rbp"),
+//             RSP => write!(f, "rsp"),
+//             RSI => write!(f, "rsi"),
+//             RDI => write!(f, "rdi"),
+//         }
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
