@@ -4,7 +4,7 @@ use std::iter::Peekable;
 use std::str::FromStr;
 use std::{fmt, io};
 
-use super::lexer::{Annot, LexError, Lexer, Loc, Token, TokenKind};
+use super::lexer::{Annot, Keyword, LexError, Lexer, Loc, Token, TokenKind};
 
 #[cfg(test)]
 mod tests;
@@ -114,6 +114,7 @@ pub enum AstNode {
     Ident(String),
     BinOp { op: BinOp, l: Box<Ast>, r: Box<Ast> },
     UniOp { op: UniOp, e: Box<Ast> },
+    Ret { e: Box<Ast> },
     Statements(Vec<Ast>),
 }
 
@@ -139,6 +140,9 @@ impl Ast {
     }
     fn uniop(op: UniOp, e: Ast, loc: Loc) -> Self {
         Self::new(AstNode::UniOp { op, e: Box::new(e) }, loc)
+    }
+    fn ret(e: Ast, loc: Loc) -> Self {
+        Self::new(AstNode::Ret { e: Box::new(e) }, loc)
     }
     fn statements(stmts: Vec<Ast>, loc: Loc) -> Self {
         Self::new(AstNode::Statements(stmts), loc)
@@ -231,6 +235,7 @@ impl UniOp {
 ///
 /// program    = stmt*
 /// stmt       = expr ";"
+///            | "return" expr ";"
 /// expr       = assign
 /// assign     = equality ("=" assign)?
 /// equality   = relational ("==" relational | "!=" relational)*
@@ -279,13 +284,26 @@ where
 /// Parse stmt
 ///
 /// stmt       = expr ";"
+///            | "return" expr ";"
 fn parse_stmt<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
     debug!("parse_stmt --");
 
-    let e = parse_expr(tokens)?;
+    let e = match tokens.peek() {
+        Some(Token {
+            value: TokenKind::Keyword(Keyword::Return),
+            ..
+        }) => {
+            let loc = tokens.next().unwrap().loc;
+            let e = parse_expr(tokens)?;
+            let loc = loc.merge(&e.loc);
+            Ast::ret(e, loc)
+        }
+        _ => parse_expr(tokens)?,
+    };
+
     let ret = match tokens.next() {
         Some(Token {
             value: TokenKind::Semicolon,
