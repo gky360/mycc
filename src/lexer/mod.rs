@@ -310,23 +310,17 @@ impl<'a> Lexer<'a> {
 
     fn lex_keyword_or_ident(&self) -> Result<Token> {
         let start = *self.pos.borrow();
-        let end = self.recognize_many(|b| b'a' <= b && b <= b'z');
+        let end = self.recognize_many(|b| {
+            (b'a' <= b && b <= b'z') || (b'A' <= b && b <= b'Z') || (b'0' <= b && b <= b'9') || b == b'_'
+        });
         let name = from_utf8(&self.input[start..end]).unwrap();
 
         // try to lex keyword
         if let Ok(keyword) = Keyword::from_str(name) {
-            return Ok(Token::keyword(keyword, Loc(start, end)));
+            Ok(Token::keyword(keyword, Loc(start, end)))
+        } else {
+            Ok(Token::ident(name, Loc(start, end)))
         }
-
-        // try to lex identifier
-        if end - start != 1 {
-            return Err(LexError::invalid_char(
-                self.input[start] as char,
-                Loc(start, end),
-            ));
-        }
-
-        Ok(Token::ident(name, Loc(start, end)))
     }
 
     fn lex_plus(&self) -> Result<Token> {
