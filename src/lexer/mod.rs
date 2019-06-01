@@ -2,7 +2,8 @@ use std::cell::RefCell;
 use std::cmp::{max, min};
 use std::fmt;
 use std::ops::FnMut;
-use std::str::from_utf8;
+use std::str::{from_utf8, FromStr};
+use strum_macros::{Display, EnumString};
 
 pub type Result<T> = std::result::Result<T, LexError>;
 
@@ -34,7 +35,7 @@ impl LexError {
 impl fmt::Display for LexError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::LexErrorKind::*;
-        match self.0.value {
+        match &self.0.value {
             InvalidChar(c) => write!(f, "{}: invalid char '{}'", self.0.loc, c),
             Eof => write!(f, "End of file"),
         }
@@ -95,12 +96,22 @@ impl<T> Annot<T> {
     }
 }
 
+
+#[derive(Display, EnumString, Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum Keyword {
+    #[strum(serialize = "return")]
+    Return,
+}
+
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenKind {
     /// [0-9]+
     Number(u64),
     /// identifier
     Ident(String),
+    /// keyword
+    Keyword(Keyword),
     /// +
     Plus,
     /// -
@@ -137,6 +148,7 @@ impl fmt::Display for TokenKind {
         match self {
             Number(n) => n.fmt(f),
             Ident(ref name) => name.fmt(f),
+            Keyword(key) => key.fmt(f),
             Plus => write!(f, "+"),
             Minus => write!(f, "-"),
             Asterisk => write!(f, "*"),
@@ -163,6 +175,9 @@ impl Token {
     }
     pub fn ident(name: &str, loc: Loc) -> Self {
         Self::new(TokenKind::Ident(String::from(name)), loc)
+    }
+    pub fn keyword(keyword: Keyword, loc: Loc) -> Self {
+        Self::new(TokenKind::Keyword(keyword), loc)
     }
     pub fn plus(loc: Loc) -> Self {
         Self::new(TokenKind::Plus, loc)
@@ -240,7 +255,7 @@ impl<'a> Lexer<'a> {
 
             match self.input[pos] {
                 b'0'...b'9' => lex_a_token!(self.lex_number()),
-                b'a'...b'z' => lex_a_token!(self.lex_ident()),
+                b'a'...b'z' => lex_a_token!(self.lex_keyword_or_ident()),
                 b'+' => lex_a_token!(self.lex_plus()),
                 b'-' => lex_a_token!(self.lex_minus()),
                 b'*' => lex_a_token!(self.lex_asterisk()),
@@ -293,9 +308,17 @@ impl<'a> Lexer<'a> {
         Ok(Token::number(n, Loc(start, end)))
     }
 
-    fn lex_ident(&self) -> Result<Token> {
+    fn lex_keyword_or_ident(&self) -> Result<Token> {
         let start = *self.pos.borrow();
         let end = self.recognize_many(|b| b'a' <= b && b <= b'z');
+        let name = from_utf8(&self.input[start..end]).unwrap();
+
+        // try to lex keyword
+        if let Ok(keyword) = Keyword::from_str(name) {
+            return Ok(Token::keyword(keyword, Loc(start, end)));
+        }
+
+        // try to lex identifier
         if end - start != 1 {
             return Err(LexError::invalid_char(
                 self.input[start] as char,
@@ -303,7 +326,6 @@ impl<'a> Lexer<'a> {
             ));
         }
 
-        let name = from_utf8(&self.input[start..end]).unwrap();
         Ok(Token::ident(name, Loc(start, end)))
     }
 

@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::{fs, io, result};
 use structopt::StructOpt;
 
-use crate::compiler::{Compiler, CompileError};
+use crate::compiler::{CompileError, Compiler};
 use crate::parser::{Ast, ParseError};
 
 pub mod asm;
@@ -106,8 +106,8 @@ pub fn run(opt: &Opt) -> Result<()> {
     match &ret {
         Err(err) => {
             err.show_trace();
-        },
-        Ok(_)=>{}
+        }
+        Ok(_) => {}
     };
     ret
 }
