@@ -76,3 +76,13 @@ fn step_10_return() {
         assert_exit_status("step_10/return_02.c", &[], 5);
     });
 }
+
+#[test]
+fn step_11_multi_chars_variable() {
+    run_test(|| {
+        assert_exit_status("step_11/multi_chars_variable_01.c", &[], 6);
+        assert_exit_status("step_11/multi_chars_variable_02.c", &[], 6);
+        assert_exit_status("step_11/multi_chars_variable_03.c", &[], 1);
+        assert_exit_status("step_11/multi_chars_variable_04.c", &[], 1);
+    });
+}
