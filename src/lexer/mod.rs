@@ -99,8 +99,14 @@ impl<T> Annot<T> {
 
 #[derive(Display, EnumString, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Keyword {
+    #[strum(serialize = "for")]
+    For,
+    #[strum(serialize = "if")]
+    If,
     #[strum(serialize = "return")]
     Return,
+    #[strum(serialize = "while")]
+    While,
 }
 
 
@@ -311,7 +317,10 @@ impl<'a> Lexer<'a> {
     fn lex_keyword_or_ident(&self) -> Result<Token> {
         let start = *self.pos.borrow();
         let end = self.recognize_many(|b| {
-            (b'a' <= b && b <= b'z') || (b'A' <= b && b <= b'Z') || (b'0' <= b && b <= b'9') || b == b'_'
+            (b'a' <= b && b <= b'z')
+                || (b'A' <= b && b <= b'Z')
+                || (b'0' <= b && b <= b'9')
+                || b == b'_'
         });
         let name = from_utf8(&self.input[start..end]).unwrap();
 
