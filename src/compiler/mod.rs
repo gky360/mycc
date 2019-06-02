@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 
 use crate::asm::{Assembly, Ent, Function, Ins, Opr, Reg};
@@ -44,33 +45,39 @@ impl fmt::Display for CompileError {
 }
 
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Compiler;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Compiler<'a> {
+    inss: Vec<Ins>,
+    var_offset: HashMap<&'a str, u64>
+}
 
-impl Compiler {
-    pub fn new() -> Compiler {
-        Compiler
+impl<'a> Compiler<'a> {
+    pub fn new() -> Compiler<'a> {
+        Compiler {
+            inss: Vec::new(),
+            var_offset: HashMap::new()
+        }
     }
 
     pub fn compile(&mut self, ast: &Ast) -> Result<Assembly> {
         use Opr::*;
         use Reg::*;
 
-        let mut inss = Vec::new();
+        self.inss.clear();
 
         // prolog
-        inss.push(Ins::PUSH(Direct(RBP)));
-        inss.push(Ins::MOV(Direct(RBP), Direct(RSP)));
-        inss.push(Ins::SUB(Direct(RSP), Literal(8 * 26)));
+        self.inss.push(Ins::PUSH(Direct(RBP)));
+        self.inss.push(Ins::MOV(Direct(RBP), Direct(RSP)));
+        self.inss.push(Ins::SUB(Direct(RSP), Literal(8 * 26)));
 
-        self.compile_ast(ast, &mut inss)?;
+        self.compile_ast(ast)?;
 
         // epilogue
-        inss.push(Ins::MOV(Direct(RSP), Direct(RBP)));
-        inss.push(Ins::POP(Direct(RBP)));
-        inss.push(Ins::RET);
+        self.inss.push(Ins::MOV(Direct(RSP), Direct(RBP)));
+        self.inss.push(Ins::POP(Direct(RBP)));
+        self.inss.push(Ins::RET);
 
-        let fn_main = Function::new("main", inss);
+        let fn_main = Function::new("main", self.inss.clone());
         Ok(Assembly::new(vec![
             Ent::dot("intel_syntax", "noprefix"),
             Ent::dot("global", "main"),
@@ -78,55 +85,55 @@ impl Compiler {
         ]))
     }
 
-    fn compile_lval(&mut self, ast: &Ast, inss: &mut Vec<Ins>) -> Result<()> {
+    fn compile_lval(&mut self, ast: &Ast) -> Result<()> {
         use Opr::*;
         use Reg::*;
 
         match &ast.value {
             AstNode::Ident(name) => {
                 let offset = (b'z' - name.as_bytes()[0] + 1) as u64 * 8;
-                inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
-                inss.push(Ins::SUB(Direct(RAX), Literal(offset)));
-                inss.push(Ins::PUSH(Direct(RAX)));
+                self.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
+                self.inss.push(Ins::SUB(Direct(RAX), Literal(offset)));
+                self.inss.push(Ins::PUSH(Direct(RAX)));
                 Ok(())
             }
             _ => Err(CompileError::lval_required(ast.loc.clone())),
         }
     }
 
-    fn compile_ast(&mut self, ast: &Ast, inss: &mut Vec<Ins>) -> Result<()> {
+    fn compile_ast(&mut self, ast: &Ast) -> Result<()> {
         match ast.value {
-            AstNode::Num(num) => self.compile_num(num, inss)?,
-            AstNode::Ident(_) => self.compile_ident(ast, inss)?,
+            AstNode::Num(num) => self.compile_num(num)?,
+            AstNode::Ident(_) => self.compile_ident(ast)?,
             AstNode::BinOp {
                 ref op,
                 ref l,
                 ref r,
-            } => self.compile_binop(op, l, r, inss)?,
-            AstNode::UniOp { ref op, ref e } => self.compile_uniop(op, e, inss)?,
-            AstNode::Ret { ref e } => self.compile_ret(e, inss)?,
-            AstNode::Statements(ref stmts) => self.compile_statements(stmts, inss)?,
+            } => self.compile_binop(op, l, r)?,
+            AstNode::UniOp { ref op, ref e } => self.compile_uniop(op, e)?,
+            AstNode::Ret { ref e } => self.compile_ret(e)?,
+            AstNode::Statements(ref stmts) => self.compile_statements(stmts)?,
         };
 
         Ok(())
     }
 
-    fn compile_num(&mut self, num: u64, inss: &mut Vec<Ins>) -> Result<()> {
+    fn compile_num(&mut self, num: u64) -> Result<()> {
         use Opr::*;
 
-        inss.push(Ins::PUSH(Literal(num)));
+        self.inss.push(Ins::PUSH(Literal(num)));
 
         Ok(())
     }
 
-    fn compile_ident(&mut self, ast: &Ast, inss: &mut Vec<Ins>) -> Result<()> {
+    fn compile_ident(&mut self, ast: &Ast) -> Result<()> {
         use Opr::*;
         use Reg::*;
 
-        self.compile_lval(ast, inss)?;
-        inss.push(Ins::POP(Direct(RAX)));
-        inss.push(Ins::MOV(Direct(RAX), Indirect(RAX)));
-        inss.push(Ins::PUSH(Direct(RAX)));
+        self.compile_lval(ast)?;
+        self.inss.push(Ins::POP(Direct(RAX)));
+        self.inss.push(Ins::MOV(Direct(RAX), Indirect(RAX)));
+        self.inss.push(Ins::PUSH(Direct(RAX)));
 
         Ok(())
     }
@@ -136,99 +143,98 @@ impl Compiler {
         binop: &BinOp,
         l: &Ast,
         r: &Ast,
-        inss: &mut Vec<Ins>,
     ) -> Result<()> {
         use Opr::*;
         use Reg::*;
 
         if binop.value == BinOpKind::Assign {
-            self.compile_lval(l, inss)?;
-            self.compile_ast(r, inss)?;
+            self.compile_lval(l)?;
+            self.compile_ast(r)?;
 
-            inss.push(Ins::POP(Direct(RDI)));
-            inss.push(Ins::POP(Direct(RAX)));
-            inss.push(Ins::MOV(Indirect(RAX), Direct(RDI)));
-            inss.push(Ins::PUSH(Direct(RDI)));
+            self.inss.push(Ins::POP(Direct(RDI)));
+            self.inss.push(Ins::POP(Direct(RAX)));
+            self.inss.push(Ins::MOV(Indirect(RAX), Direct(RDI)));
+            self.inss.push(Ins::PUSH(Direct(RDI)));
             return Ok(());
         }
 
-        self.compile_ast(l, inss)?;
-        self.compile_ast(r, inss)?;
-        inss.push(Ins::POP(Direct(RDI)));
-        inss.push(Ins::POP(Direct(RAX)));
+        self.compile_ast(l)?;
+        self.compile_ast(r)?;
+        self.inss.push(Ins::POP(Direct(RDI)));
+        self.inss.push(Ins::POP(Direct(RAX)));
         match binop.value {
             BinOpKind::Assign => unreachable!(),
-            BinOpKind::Add => inss.push(Ins::ADD(Direct(RAX), Direct(RDI))),
-            BinOpKind::Sub => inss.push(Ins::SUB(Direct(RAX), Direct(RDI))),
-            BinOpKind::Mul => inss.push(Ins::IMUL(Direct(RDI))),
+            BinOpKind::Add => self.inss.push(Ins::ADD(Direct(RAX), Direct(RDI))),
+            BinOpKind::Sub => self.inss.push(Ins::SUB(Direct(RAX), Direct(RDI))),
+            BinOpKind::Mul => self.inss.push(Ins::IMUL(Direct(RDI))),
             BinOpKind::Div => {
-                inss.push(Ins::CQO);
-                inss.push(Ins::IDIV(Direct(RDI)));
+                self.inss.push(Ins::CQO);
+                self.inss.push(Ins::IDIV(Direct(RDI)));
             }
             BinOpKind::Eq | BinOpKind::Ne | BinOpKind::Lt | BinOpKind::Le => {
-                inss.push(Ins::CMP(Direct(RAX), Direct(RDI)));
+                self.inss.push(Ins::CMP(Direct(RAX), Direct(RDI)));
                 match binop.value {
-                    BinOpKind::Eq => inss.push(Ins::SETE(Direct(AL))),
-                    BinOpKind::Ne => inss.push(Ins::SETNE(Direct(AL))),
-                    BinOpKind::Lt => inss.push(Ins::SETL(Direct(AL))),
-                    BinOpKind::Le => inss.push(Ins::SETLE(Direct(AL))),
+                    BinOpKind::Eq => self.inss.push(Ins::SETE(Direct(AL))),
+                    BinOpKind::Ne => self.inss.push(Ins::SETNE(Direct(AL))),
+                    BinOpKind::Lt => self.inss.push(Ins::SETL(Direct(AL))),
+                    BinOpKind::Le => self.inss.push(Ins::SETLE(Direct(AL))),
                     _ => {}
                 }
-                inss.push(Ins::MOVZB(Direct(RAX), Direct(AL)));
+                self.inss.push(Ins::MOVZB(Direct(RAX), Direct(AL)));
             }
             BinOpKind::Gt | BinOpKind::Ge => {
-                inss.push(Ins::CMP(Direct(RDI), Direct(RAX)));
+                self.inss.push(Ins::CMP(Direct(RDI), Direct(RAX)));
                 match binop.value {
-                    BinOpKind::Gt => inss.push(Ins::SETL(Direct(AL))),
-                    BinOpKind::Ge => inss.push(Ins::SETLE(Direct(AL))),
+                    BinOpKind::Gt => self.inss.push(Ins::SETL(Direct(AL))),
+                    BinOpKind::Ge => self.inss.push(Ins::SETLE(Direct(AL))),
                     _ => {}
                 }
-                inss.push(Ins::MOVZB(Direct(RAX), Direct(AL)));
+                self.inss.push(Ins::MOVZB(Direct(RAX), Direct(AL)));
             }
         };
-        inss.push(Ins::PUSH(Direct(RAX)));
+        self.inss.push(Ins::PUSH(Direct(RAX)));
 
         Ok(())
     }
 
-    fn compile_uniop(&mut self, uniop: &UniOp, e: &Ast, inss: &mut Vec<Ins>) -> Result<()> {
-        self.compile_ast(e, inss)?;
+    fn compile_uniop(&mut self, uniop: &UniOp, e: &Ast) -> Result<()> {
+        self.compile_ast(e)?;
 
         match uniop.value {
             UniOpKind::Positive => {}
             UniOpKind::Negative => {
                 // consider -x as 0 - x
-                inss.push(Ins::POP(Opr::Direct(Reg::RDI)));
-                inss.push(Ins::MOV(Opr::Direct(Reg::RAX), Opr::Literal(0)));
-                inss.push(Ins::SUB(Opr::Direct(Reg::RAX), Opr::Direct(Reg::RDI)));
-                inss.push(Ins::PUSH(Opr::Direct(Reg::RAX)));
+                self.inss.push(Ins::POP(Opr::Direct(Reg::RDI)));
+                self.inss.push(Ins::MOV(Opr::Direct(Reg::RAX), Opr::Literal(0)));
+                self.inss.push(Ins::SUB(Opr::Direct(Reg::RAX), Opr::Direct(Reg::RDI)));
+                self.inss.push(Ins::PUSH(Opr::Direct(Reg::RAX)));
             }
         };
 
         Ok(())
     }
 
-    fn compile_ret(&mut self, e: &Ast, inss: &mut Vec<Ins>) -> Result<()> {
+    fn compile_ret(&mut self, e: &Ast) -> Result<()> {
         use Opr::*;
         use Reg::*;
 
-        self.compile_ast(e, inss)?;
+        self.compile_ast(e)?;
 
-        inss.push(Ins::POP(Direct(RAX)));
-        inss.push(Ins::MOV(Direct(RSP), Direct(RBP)));
-        inss.push(Ins::POP(Direct(RBP)));
-        inss.push(Ins::RET);
+        self.inss.push(Ins::POP(Direct(RAX)));
+        self.inss.push(Ins::MOV(Direct(RSP), Direct(RBP)));
+        self.inss.push(Ins::POP(Direct(RBP)));
+        self.inss.push(Ins::RET);
 
         Ok(())
     }
 
-    fn compile_statements(&mut self, stmts: &Vec<Ast>, inss: &mut Vec<Ins>) -> Result<()> {
+    fn compile_statements(&mut self, stmts: &Vec<Ast>) -> Result<()> {
         use Opr::*;
         use Reg::*;
 
         for ast in stmts {
-            self.compile_ast(ast, inss)?;
-            inss.push(Ins::POP(Direct(RAX)));
+            self.compile_ast(ast)?;
+            self.inss.push(Ins::POP(Direct(RAX)));
         }
 
         Ok(())
