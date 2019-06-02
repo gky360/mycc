@@ -48,29 +48,36 @@ impl fmt::Display for CompileError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Compiler<'a> {
     inss: Vec<Ins>,
-    var_offset: HashMap<&'a str, u64>
+    var_offset: HashMap<&'a str, u64>,
 }
 
 impl<'a> Compiler<'a> {
     pub fn new() -> Compiler<'a> {
         Compiler {
             inss: Vec::new(),
-            var_offset: HashMap::new()
+            var_offset: HashMap::new(),
         }
     }
 
-    pub fn compile(&mut self, ast: &Ast) -> Result<Assembly> {
+    pub fn compile(&mut self, ast: &'a Ast) -> Result<Assembly> {
         use Opr::*;
         use Reg::*;
 
         self.inss.clear();
+        self.var_offset.clear();
 
         // prolog
         self.inss.push(Ins::PUSH(Direct(RBP)));
         self.inss.push(Ins::MOV(Direct(RBP), Direct(RSP)));
-        self.inss.push(Ins::SUB(Direct(RSP), Literal(8 * 26)));
+        // Total size of local variables is not known at this time,
+        // so mycc first reserve instruction here with `sub rsp, 0`
+        // and replace `0` with actual size needed after finishing compiling the function.
+        self.inss.push(Ins::SUB(Direct(RSP), Literal(0)));
+        let ins_id_for_reserve_local_vars = self.inss.len() - 1;
 
         self.compile_ast(ast)?;
+        self.inss[ins_id_for_reserve_local_vars] =
+            Ins::SUB(Direct(RSP), Literal(8 * self.var_offset.len() as u64));
 
         // epilogue
         self.inss.push(Ins::MOV(Direct(RSP), Direct(RBP)));
@@ -85,13 +92,22 @@ impl<'a> Compiler<'a> {
         ]))
     }
 
-    fn compile_lval(&mut self, ast: &Ast) -> Result<()> {
+    fn compile_lval(&mut self, ast: &'a Ast) -> Result<()> {
         use Opr::*;
         use Reg::*;
 
         match &ast.value {
             AstNode::Ident(name) => {
-                let offset = (b'z' - name.as_bytes()[0] + 1) as u64 * 8;
+                let offset = {
+                    match self.var_offset.get(name as &str) {
+                        Some(offset) => *offset,
+                        None => {
+                            let offset = 8 * (self.var_offset.len() + 1) as u64;
+                            self.var_offset.insert(name, offset);
+                            offset
+                        }
+                    }
+                };
                 self.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
                 self.inss.push(Ins::SUB(Direct(RAX), Literal(offset)));
                 self.inss.push(Ins::PUSH(Direct(RAX)));
@@ -101,7 +117,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn compile_ast(&mut self, ast: &Ast) -> Result<()> {
+    fn compile_ast(&mut self, ast: &'a Ast) -> Result<()> {
         match ast.value {
             AstNode::Num(num) => self.compile_num(num)?,
             AstNode::Ident(_) => self.compile_ident(ast)?,
@@ -126,7 +142,7 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn compile_ident(&mut self, ast: &Ast) -> Result<()> {
+    fn compile_ident(&mut self, ast: &'a Ast) -> Result<()> {
         use Opr::*;
         use Reg::*;
 
@@ -138,12 +154,7 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn compile_binop(
-        &mut self,
-        binop: &BinOp,
-        l: &Ast,
-        r: &Ast,
-    ) -> Result<()> {
+    fn compile_binop(&mut self, binop: &BinOp, l: &'a Ast, r: &'a Ast) -> Result<()> {
         use Opr::*;
         use Reg::*;
 
@@ -197,7 +208,7 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn compile_uniop(&mut self, uniop: &UniOp, e: &Ast) -> Result<()> {
+    fn compile_uniop(&mut self, uniop: &UniOp, e: &'a Ast) -> Result<()> {
         self.compile_ast(e)?;
 
         match uniop.value {
@@ -205,8 +216,10 @@ impl<'a> Compiler<'a> {
             UniOpKind::Negative => {
                 // consider -x as 0 - x
                 self.inss.push(Ins::POP(Opr::Direct(Reg::RDI)));
-                self.inss.push(Ins::MOV(Opr::Direct(Reg::RAX), Opr::Literal(0)));
-                self.inss.push(Ins::SUB(Opr::Direct(Reg::RAX), Opr::Direct(Reg::RDI)));
+                self.inss
+                    .push(Ins::MOV(Opr::Direct(Reg::RAX), Opr::Literal(0)));
+                self.inss
+                    .push(Ins::SUB(Opr::Direct(Reg::RAX), Opr::Direct(Reg::RDI)));
                 self.inss.push(Ins::PUSH(Opr::Direct(Reg::RAX)));
             }
         };
@@ -214,7 +227,7 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn compile_ret(&mut self, e: &Ast) -> Result<()> {
+    fn compile_ret(&mut self, e: &'a Ast) -> Result<()> {
         use Opr::*;
         use Reg::*;
 
@@ -228,7 +241,7 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn compile_statements(&mut self, stmts: &Vec<Ast>) -> Result<()> {
+    fn compile_statements(&mut self, stmts: &'a Vec<Ast>) -> Result<()> {
         use Opr::*;
         use Reg::*;
 
