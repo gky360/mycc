@@ -35,3 +35,12 @@ fn test_step_09_single_char_variable() {
     let names = vec!["step_09/invalid/syntax_err_no_semicolon.c"];
     names.iter().for_each(|name| assert_parse_error(name))
 }
+
+#[test]
+fn test_step_12_control_flow() {
+    let names = vec![
+        "step_12/invalid/if_assignment.c",
+        "step_12/invalid/mismatched_nesting.c",
+    ];
+    names.iter().for_each(|name| assert_parse_error(name))
+}

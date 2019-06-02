@@ -86,3 +86,18 @@ fn step_11_multi_chars_variable() {
         assert_exit_status("step_11/valid/multi_chars_variable_04.c", &[], 1);
     });
 }
+
+#[test]
+fn step_12_control_flow() {
+    run_test(|| {
+        assert_exit_status("step_12/valid/else.c", &[], 2);
+        assert_exit_status("step_12/valid/if_nested_1.c", &[], 1);
+        assert_exit_status("step_12/valid/if_nested_2.c", &[], 2);
+        assert_exit_status("step_12/valid/if_nested_3.c", &[], 3);
+        assert_exit_status("step_12/valid/if_nested_4.c", &[], 4);
+        assert_exit_status("step_12/valid/if_nested_5.c", &[], 1);
+        assert_exit_status("step_12/valid/if_not_taken.c", &[], 0);
+        assert_exit_status("step_12/valid/if_taken.c", &[], 1);
+        assert_exit_status("step_12/valid/multiple_if.c", &[], 8);
+    });
+}
