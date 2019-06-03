@@ -51,12 +51,15 @@ impl Loc {
     }
 
     pub fn annotate<T: fmt::Write>(&self, f: &mut T, input: &str) -> fmt::Result {
+        // calculate required width for line numbers
         let mut c = input.lines().count();
         let mut digits = 0;
         while c > 0 {
             digits += 1;
             c /= 10;
         }
+
+        // annotate input
         let mut sum_len = 0;
         for (i, line) in input.lines().enumerate() {
             let line_len = line.len() + 1; // take '\n' into account
@@ -74,6 +77,7 @@ impl Loc {
             }
             sum_len += line_len;
         }
+
         Ok(())
     }
 }
