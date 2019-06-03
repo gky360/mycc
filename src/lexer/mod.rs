@@ -102,6 +102,8 @@ impl<T> Annot<T> {
 
 #[derive(Display, EnumString, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Keyword {
+    #[strum(serialize = "else")]
+    Else,
     // #[strum(serialize = "for")]
     // For,
     #[strum(serialize = "if")]

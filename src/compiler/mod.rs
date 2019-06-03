@@ -13,6 +13,7 @@ pub type Result<T> = std::result::Result<T, CompileError>;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CompileErrorKind {
     LValRequired,
+    NotImplemented,
 }
 
 #[derive(Fail, Debug, Clone, PartialEq, Eq, Hash)]
@@ -24,6 +25,9 @@ impl CompileError {
     }
     fn lval_required(loc: Loc) -> Self {
         CompileError::new(CompileErrorKind::LValRequired, loc)
+    }
+    fn not_implemented(loc: Loc) -> Self {
+        CompileError::new(CompileErrorKind::NotImplemented, loc)
     }
 
     pub fn loc(&self) -> &Loc {
@@ -38,6 +42,11 @@ impl fmt::Display for CompileError {
             LValRequired => write!(
                 f,
                 "{}: lvalue required as left operand of assignment",
+                self.0.loc
+            ),
+            NotImplemented => write!(
+                f,
+                "{}: compiler is not implemented for this syntax",
                 self.0.loc
             ),
         }
@@ -118,19 +127,18 @@ impl<'a> Compiler<'a> {
 
     fn compile_ast(&mut self, ast: &'a Ast) -> Result<()> {
         match ast.value {
-            AstNode::Statements(ref stmts) => self.compile_statements(stmts)?,
-            AstNode::Num(num) => self.compile_num(num)?,
-            AstNode::Ident(_) => self.compile_ident(ast)?,
+            AstNode::Statements(ref stmts) => self.compile_statements(stmts),
+            AstNode::StatementIf { .. } => Err(CompileError::not_implemented(ast.loc.clone())),
+            AstNode::Num(num) => self.compile_num(num),
+            AstNode::Ident(_) => self.compile_ident(ast),
             AstNode::BinOp {
                 ref op,
                 ref l,
                 ref r,
-            } => self.compile_binop(op, l, r)?,
-            AstNode::UniOp { ref op, ref e } => self.compile_uniop(op, e)?,
-            AstNode::Ret { ref e } => self.compile_ret(e)?,
-        };
-
-        Ok(())
+            } => self.compile_binop(op, l, r),
+            AstNode::UniOp { ref op, ref e } => self.compile_uniop(op, e),
+            AstNode::Ret { ref e } => self.compile_ret(e),
+        }
     }
 
     fn compile_num(&mut self, num: u64) -> Result<()> {
