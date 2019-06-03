@@ -208,6 +208,7 @@ impl<'a> Compiler<'a> {
             }
         }
         self.inss.push(Ins::DefLabel(label_end));
+        self.inss.push(Ins::PUSH(Direct(RAX)));
 
         Ok(())
     }

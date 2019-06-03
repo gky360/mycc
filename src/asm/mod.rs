@@ -96,7 +96,7 @@ impl Label {
 
 impl fmt::Display for Label {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, ".L{}_{:>08x}", self.name, self.id)
+        write!(f, ".L{}_{:>08x}", self.name, self.id)
     }
 }
 
