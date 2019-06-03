@@ -98,7 +98,6 @@ impl fmt::Display for ParseError {
                             token.value
                         )
                     }
-
                 }
             }
             Eof => write!(f, "unexpected end of file"),
@@ -106,15 +105,29 @@ impl fmt::Display for ParseError {
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AstNode {
+    Statements(Vec<Ast>),
+    // If {
+    //     cond: Box<Ast>,
+    //     stmt: Box<Ast>,
+    //     els: Option<Box<Ast>>,
+    // },
+    // While {
+    //     cond: Box<Ast>,
+    //     stmt: Box<Ast>,
+    // },
+    // For {
+    //     init: Option<Box<Ast>>,
+    //     cond: Option<Box<Ast>>,
+    //     incr: Option<Box<Ast>>,
+    //     stmt: Box<Ast>,
+    // },
     Num(u64),
     Ident(String),
     BinOp { op: BinOp, l: Box<Ast>, r: Box<Ast> },
     UniOp { op: UniOp, e: Box<Ast> },
     Ret { e: Box<Ast> },
-    Statements(Vec<Ast>),
 }
 
 pub type Ast = Annot<AstNode>;
@@ -156,7 +169,6 @@ impl FromStr for Ast {
         Ok(ast)
     }
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BinOpKind {
@@ -211,7 +223,6 @@ impl BinOp {
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum UniOpKind {
     Positive,
@@ -229,11 +240,13 @@ impl UniOp {
     }
 }
 
-
 /// Parse tokens with following rules
 ///
 /// program    = stmt*
 /// stmt       = expr ";"
+///            | "if" "(" expr ")" stmt ("else" stmt)?
+// ///            | "while" "(" expr ")" stmt
+// ///            | "for" "(" expr? ";" expr? ";" expr? ")" stmt
 ///            | "return" expr ";"
 /// expr       = assign
 /// assign     = equality ("=" assign)?
@@ -283,6 +296,9 @@ where
 /// Parse stmt
 ///
 /// stmt       = expr ";"
+///            | "if" "(" expr ")" stmt ("else" stmt)?
+///            | "while" "(" expr ")" stmt
+///            | "for" "(" expr? ";" expr? ";" expr? ")" stmt
 ///            | "return" expr ";"
 fn parse_stmt<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
@@ -290,11 +306,13 @@ where
 {
     debug!("parse_stmt --");
 
-    let e = match tokens.peek() {
-        Some(Token {
-            value: TokenKind::Keyword(Keyword::Return),
-            ..
-        }) => {
+    let e = match tokens.peek().map(|token| &token.value) {
+        // Some(TokenKind::Keyword(Keyword::If)) => {
+        //     let loc = tokens.next().unwrap().loc;
+        // }
+        // Some(TokenKind::Keyword(Keyword::While)) => {}
+        // Some(TokenKind::Keyword(Keyword::For)) => {}
+        Some(TokenKind::Keyword(Keyword::Return)) => {
             let loc = tokens.next().unwrap().loc;
             let e = parse_expr(tokens)?;
             let loc = loc.merge(&e.loc);

@@ -100,19 +100,17 @@ impl<T> Annot<T> {
     }
 }
 
-
 #[derive(Display, EnumString, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Keyword {
-    #[strum(serialize = "for")]
-    For,
+    // #[strum(serialize = "for")]
+    // For,
     #[strum(serialize = "if")]
     If,
     #[strum(serialize = "return")]
     Return,
-    #[strum(serialize = "while")]
-    While,
+    // #[strum(serialize = "while")]
+    // While,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenKind {

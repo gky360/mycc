@@ -44,7 +44,6 @@ impl fmt::Display for CompileError {
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Compiler<'a> {
     inss: Vec<Ins>,
@@ -119,6 +118,7 @@ impl<'a> Compiler<'a> {
 
     fn compile_ast(&mut self, ast: &'a Ast) -> Result<()> {
         match ast.value {
+            AstNode::Statements(ref stmts) => self.compile_statements(stmts)?,
             AstNode::Num(num) => self.compile_num(num)?,
             AstNode::Ident(_) => self.compile_ident(ast)?,
             AstNode::BinOp {
@@ -128,7 +128,6 @@ impl<'a> Compiler<'a> {
             } => self.compile_binop(op, l, r)?,
             AstNode::UniOp { ref op, ref e } => self.compile_uniop(op, e)?,
             AstNode::Ret { ref e } => self.compile_ret(e)?,
-            AstNode::Statements(ref stmts) => self.compile_statements(stmts)?,
         };
 
         Ok(())
