@@ -33,6 +33,14 @@ impl CompileError {
     pub fn loc(&self) -> &Loc {
         &self.0.loc
     }
+
+    pub fn show_diagnostic(&self, input: &str) {
+        let mut message = String::new();
+        self.loc()
+            .annotate(&mut message, input)
+            .expect("failed to generate error message.");
+        eprintln!("{}", message);
+    }
 }
 
 impl fmt::Display for CompileError {
