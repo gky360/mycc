@@ -32,13 +32,14 @@ pub enum Error {
 }
 
 impl Error {
+    const INDENT: &'static str = "    ";
+
     pub fn show_trace(&self) {
-        let indent = "    ";
         eprintln!("{}", self);
         let err: &Fail = self;
         for (i, err) in err.iter_causes().enumerate() {
-            eprintln!("{}caused by:", indent.repeat(i));
-            eprintln!("{}{}", indent.repeat(i + 1), err);
+            eprintln!("{}caused by:", Self::INDENT.repeat(i));
+            eprintln!("{}{}", Self::INDENT.repeat(i + 1), err);
         }
     }
 }

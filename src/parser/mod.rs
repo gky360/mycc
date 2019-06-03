@@ -1,8 +1,7 @@
 use failure::Fail;
-use std::io::Write;
+use std::fmt;
 use std::iter::Peekable;
 use std::str::FromStr;
-use std::{fmt, io};
 
 use super::lexer::{Annot, Keyword, LexError, Lexer, Loc, Token, TokenKind};
 
@@ -46,7 +45,7 @@ impl ParseError {
         let mut message = String::new();
         loc.annotate(&mut message, input)
             .expect("failed to generate error message.");
-        write!(io::stderr(), "{}", message).expect("failed to output error message.");
+        eprintln!("{}", message);
     }
 }
 
