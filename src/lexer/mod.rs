@@ -51,12 +51,15 @@ impl Loc {
     }
 
     pub fn annotate<T: fmt::Write>(&self, f: &mut T, input: &str) -> fmt::Result {
+        // calculate required width for line numbers
         let mut c = input.lines().count();
         let mut digits = 0;
         while c > 0 {
             digits += 1;
             c /= 10;
         }
+
+        // annotate input
         let mut sum_len = 0;
         for (i, line) in input.lines().enumerate() {
             let line_len = line.len() + 1; // take '\n' into account
@@ -74,6 +77,7 @@ impl Loc {
             }
             sum_len += line_len;
         }
+
         Ok(())
     }
 }
@@ -96,13 +100,19 @@ impl<T> Annot<T> {
     }
 }
 
-
 #[derive(Display, EnumString, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Keyword {
+    #[strum(serialize = "else")]
+    Else,
+    // #[strum(serialize = "for")]
+    // For,
+    #[strum(serialize = "if")]
+    If,
     #[strum(serialize = "return")]
     Return,
+    // #[strum(serialize = "while")]
+    // While,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenKind {
@@ -311,7 +321,10 @@ impl<'a> Lexer<'a> {
     fn lex_keyword_or_ident(&self) -> Result<Token> {
         let start = *self.pos.borrow();
         let end = self.recognize_many(|b| {
-            (b'a' <= b && b <= b'z') || (b'A' <= b && b <= b'Z') || (b'0' <= b && b <= b'9') || b == b'_'
+            (b'a' <= b && b <= b'z')
+                || (b'A' <= b && b <= b'Z')
+                || (b'0' <= b && b <= b'9')
+                || b == b'_'
         });
         let name = from_utf8(&self.input[start..end]).unwrap();
 

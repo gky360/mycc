@@ -24,7 +24,7 @@ impl fmt::Display for Assembly {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Ent {
     /// e.g. `.intel_syntax noprefix`
-    Dot(String, String),
+    Dot(&'static str, &'static str),
     /// e.g. `main:`
     Fun(Function),
     /// empty line
@@ -33,8 +33,8 @@ pub enum Ent {
 }
 
 impl Ent {
-    pub fn dot(name: &str, content: &str) -> Ent {
-        Ent::Dot(String::from(name), String::from(content))
+    pub fn dot(name: &'static str, content: &'static str) -> Ent {
+        Ent::Dot(name, content)
     }
 
     pub fn raw(content: &str) -> Ent {
@@ -55,32 +55,65 @@ impl fmt::Display for Ent {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Function(String, Vec<Ins>);
+pub struct Function {
+    name: String,
+    instructions: Vec<Ins>,
+}
 
 impl Function {
-    pub fn new(name: &str, instructions: Vec<Ins>) -> Function {
-        Function(String::from(name), instructions)
+    pub fn new(name: &str, instructions: Vec<Ins>) -> Self {
+        Function {
+            name: String::from(name),
+            instructions,
+        }
     }
 }
 
 impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "{}:", self.0)?;
-        for ins in self.1.iter() {
-            writeln!(f, "{}{}", INDENT, ins)?;
+        writeln!(f, "{}:", self.name)?;
+        for ins in self.instructions.iter() {
+            match ins {
+                Ins::DefLabel(label) => writeln!(f, "{}:", label)?,
+                ins => writeln!(f, "{}{}", INDENT, ins)?,
+            }
         }
         Ok(())
     }
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct Label {
+    name: &'static str,
+    id: usize,
+}
+
+impl Label {
+    pub fn new(name: &'static str, id: usize) -> Self {
+        Label { name, id }
+    }
+}
+
+impl fmt::Display for Label {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, ".L{}_{:>08x}", self.name, self.id)
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Ins {
+    /// define label
+    /// e.g. `.Lend_xxx:`
+    DefLabel(Label),
+
     ADD(Opr, Opr),
     CALL(String),
     CMP(Opr, Opr),
     CQO,
     IDIV(Opr),
     IMUL(Opr),
+    JE(Label),
+    JMP(Label),
     MOV(Opr, Opr),
     MOVZB(Opr, Opr),
     POP(Opr),
@@ -103,12 +136,16 @@ impl fmt::Display for Ins {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Ins::*;
         match self {
+            DefLabel(label) => write!(f, "{}", label),
+
             ADD(opr1, opr2) => write!(f, "add {}, {}", opr1, opr2),
             CQO => write!(f, "cqo"),
             CALL(name) => write!(f, "call {}", name),
             CMP(opr1, opr2) => write!(f, "cmp {}, {}", opr1, opr2),
             IDIV(opr) => write!(f, "idiv {}", opr),
             IMUL(opr) => write!(f, "imul {}", opr),
+            JE(label) => write!(f, "je {}", label),
+            JMP(label) => write!(f, "jmp {}", label),
             MOV(opr1, opr2) => write!(f, "mov {}, {}", opr1, opr2),
             MOVZB(opr1, opr2) => write!(f, "movzb {}, {}", opr1, opr2),
             POP(opr) => write!(f, "pop {}", opr),
@@ -178,23 +215,6 @@ pub enum Reg {
     #[strum(serialize = "rdi")]
     RDI,
 }
-
-// impl fmt::Display for Reg {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         use Reg::*;
-//         match self {
-//             AL => write!(f, "al"),
-//             RAX => write!(f, "rax"),
-//             RBX => write!(f, "rbx"),
-//             RCX => write!(f, "rcx"),
-//             RDX => write!(f, "rdx"),
-//             RBP => write!(f, "rbp"),
-//             RSP => write!(f, "rsp"),
-//             RSI => write!(f, "rsi"),
-//             RDI => write!(f, "rdi"),
-//         }
-//     }
-// }
 
 #[cfg(test)]
 mod tests {

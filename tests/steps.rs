@@ -47,42 +47,57 @@ fn step_05_unary_operator() {
 #[test]
 fn step_06_relational_operator() {
     run_test(|| {
-        assert_exit_status("step_06/relational_operator_01.c", &[], 1);
-        assert_exit_status("step_06/relational_operator_02.c", &[], 1);
-        assert_exit_status("step_06/relational_operator_03.c", &[], 1);
-        assert_exit_status("step_06/relational_operator_04.c", &[], 1);
-        assert_exit_status("step_06/relational_operator_05.c", &[], 0);
+        assert_exit_status("step_06/valid/relational_operator_01.c", &[], 1);
+        assert_exit_status("step_06/valid/relational_operator_02.c", &[], 1);
+        assert_exit_status("step_06/valid/relational_operator_03.c", &[], 1);
+        assert_exit_status("step_06/valid/relational_operator_04.c", &[], 1);
+        assert_exit_status("step_06/valid/relational_operator_05.c", &[], 0);
     });
 }
 
 #[test]
 fn step_09_single_char_varibale() {
     run_test(|| {
-        assert_exit_status("step_09/assign_val.c", &[], 0);
-        assert_exit_status("step_09/assign.c", &[], 2);
-        assert_exit_status("step_09/multiple_vars.c", &[], 3);
-        assert_exit_status("step_09/no_initialize.c", &[], 0);
-        assert_exit_status("step_09/refer.c", &[], 2);
-        assert_exit_status("step_09/unused_exp.c", &[], 0);
+        assert_exit_status("step_09/valid/assign_val.c", &[], 0);
+        assert_exit_status("step_09/valid/assign.c", &[], 2);
+        assert_exit_status("step_09/valid/multiple_vars.c", &[], 3);
+        assert_exit_status("step_09/valid/no_initialize.c", &[], 0);
+        assert_exit_status("step_09/valid/refer.c", &[], 2);
+        assert_exit_status("step_09/valid/unused_exp.c", &[], 0);
 
-        assert_exit_status("step_09/single_char_variable_01.c", &[], 13);
+        assert_exit_status("step_09/valid/single_char_variable_01.c", &[], 13);
     });
 }
 
 #[test]
 fn step_10_return() {
     run_test(|| {
-        assert_exit_status("step_10/return_01.c", &[], 14);
-        assert_exit_status("step_10/return_02.c", &[], 5);
+        assert_exit_status("step_10/valid/return_01.c", &[], 14);
+        assert_exit_status("step_10/valid/return_02.c", &[], 5);
     });
 }
 
 #[test]
 fn step_11_multi_chars_variable() {
     run_test(|| {
-        assert_exit_status("step_11/multi_chars_variable_01.c", &[], 6);
-        assert_exit_status("step_11/multi_chars_variable_02.c", &[], 6);
-        assert_exit_status("step_11/multi_chars_variable_03.c", &[], 1);
-        assert_exit_status("step_11/multi_chars_variable_04.c", &[], 1);
+        assert_exit_status("step_11/valid/multi_chars_variable_01.c", &[], 6);
+        assert_exit_status("step_11/valid/multi_chars_variable_02.c", &[], 6);
+        assert_exit_status("step_11/valid/multi_chars_variable_03.c", &[], 1);
+        assert_exit_status("step_11/valid/multi_chars_variable_04.c", &[], 1);
+    });
+}
+
+#[test]
+fn step_12_1_control_flow() {
+    run_test(|| {
+        assert_exit_status("step_12_1/valid/else.c", &[], 2);
+        assert_exit_status("step_12_1/valid/if_nested_1.c", &[], 1);
+        assert_exit_status("step_12_1/valid/if_nested_2.c", &[], 2);
+        assert_exit_status("step_12_1/valid/if_nested_3.c", &[], 3);
+        assert_exit_status("step_12_1/valid/if_nested_4.c", &[], 4);
+        assert_exit_status("step_12_1/valid/if_nested_5.c", &[], 1);
+        assert_exit_status("step_12_1/valid/if_not_taken.c", &[], 0);
+        assert_exit_status("step_12_1/valid/if_taken.c", &[], 1);
+        assert_exit_status("step_12_1/valid/multiple_if.c", &[], 8);
     });
 }

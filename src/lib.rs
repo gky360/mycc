@@ -10,7 +10,7 @@ use std::{fs, io, result};
 use structopt::StructOpt;
 
 use crate::compiler::{CompileError, Compiler};
-use crate::parser::{Ast, ParseError};
+use crate::parser::ParseError;
 
 pub mod asm;
 pub mod compiler;
@@ -32,13 +32,14 @@ pub enum Error {
 }
 
 impl Error {
+    const INDENT: &'static str = "    ";
+
     pub fn show_trace(&self) {
-        let indent = "    ";
         eprintln!("{}", self);
         let err: &Fail = self;
         for (i, err) in err.iter_causes().enumerate() {
-            eprintln!("{}caused by:", indent.repeat(i));
-            eprintln!("{}{}", indent.repeat(i + 1), err);
+            eprintln!("{}caused by:", Self::INDENT.repeat(i));
+            eprintln!("{}{}", Self::INDENT.repeat(i + 1), err);
         }
     }
 }
@@ -78,17 +79,17 @@ fn run_inner(opt: &Opt) -> Result<()> {
     let source = fs::read_to_string(&opt.input)?;
 
     // parse to generate AST
-    let ast: Ast = match source.parse() {
-        Err(err) => {
-            (&err as &ParseError).show_diagnostic(&source);
-            return Err(Error::Parse(err));
-        }
-        Ok(ast) => ast,
-    };
+    let ast = source.parse().map_err(|err: ParseError| {
+        err.show_diagnostic(&source);
+        err
+    })?;
 
     // compile to generate assembly
     let mut compiler = Compiler::new();
-    let assembly = compiler.compile(&ast)?;
+    let assembly = compiler.compile(&ast).map_err(|err| {
+        err.show_diagnostic(&source);
+        err
+    })?;
 
     // output assembly to .s file
     let mut out = io::BufWriter::new(fs::File::create(&opt.output)?);

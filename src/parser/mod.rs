@@ -1,8 +1,7 @@
 use failure::Fail;
-use std::io::Write;
+use std::fmt;
 use std::iter::Peekable;
 use std::str::FromStr;
-use std::{fmt, io};
 
 use super::lexer::{Annot, Keyword, LexError, Lexer, Loc, Token, TokenKind};
 
@@ -46,7 +45,7 @@ impl ParseError {
         let mut message = String::new();
         loc.annotate(&mut message, input)
             .expect("failed to generate error message.");
-        write!(io::stderr(), "{}", message).expect("failed to output error message.");
+        eprintln!("{}", message);
     }
 }
 
@@ -99,7 +98,6 @@ impl fmt::Display for ParseError {
                             token.value
                         )
                     }
-
                 }
             }
             Eof => write!(f, "unexpected end of file"),
@@ -107,20 +105,56 @@ impl fmt::Display for ParseError {
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AstNode {
+    Statements(Vec<Ast>),
+    StatementIf {
+        cond: Box<Ast>,
+        stmt: Box<Ast>,
+        els: Option<Box<Ast>>,
+    },
+    // While {
+    //     cond: Box<Ast>,
+    //     stmt: Box<Ast>,
+    // },
+    // For {
+    //     init: Option<Box<Ast>>,
+    //     cond: Option<Box<Ast>>,
+    //     incr: Option<Box<Ast>>,
+    //     stmt: Box<Ast>,
+    // },
     Num(u64),
     Ident(String),
-    BinOp { op: BinOp, l: Box<Ast>, r: Box<Ast> },
-    UniOp { op: UniOp, e: Box<Ast> },
-    Ret { e: Box<Ast> },
-    Statements(Vec<Ast>),
+    BinOp {
+        op: BinOp,
+        l: Box<Ast>,
+        r: Box<Ast>,
+    },
+    UniOp {
+        op: UniOp,
+        e: Box<Ast>,
+    },
+    Ret {
+        e: Box<Ast>,
+    },
 }
 
 pub type Ast = Annot<AstNode>;
 
 impl Ast {
+    fn statements(stmts: Vec<Ast>, loc: Loc) -> Self {
+        Self::new(AstNode::Statements(stmts), loc)
+    }
+    fn stmt_if(cond: Ast, stmt: Ast, els: Option<Ast>, loc: Loc) -> Self {
+        Self::new(
+            AstNode::StatementIf {
+                cond: Box::new(cond),
+                stmt: Box::new(stmt),
+                els: els.map(|els| Box::new(els)),
+            },
+            loc,
+        )
+    }
     fn num(n: u64, loc: Loc) -> Self {
         // call Annot::new
         Self::new(AstNode::Num(n), loc)
@@ -144,9 +178,6 @@ impl Ast {
     fn ret(e: Ast, loc: Loc) -> Self {
         Self::new(AstNode::Ret { e: Box::new(e) }, loc)
     }
-    fn statements(stmts: Vec<Ast>, loc: Loc) -> Self {
-        Self::new(AstNode::Statements(stmts), loc)
-    }
 }
 
 impl FromStr for Ast {
@@ -157,7 +188,6 @@ impl FromStr for Ast {
         Ok(ast)
     }
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BinOpKind {
@@ -212,7 +242,6 @@ impl BinOp {
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum UniOpKind {
     Positive,
@@ -230,20 +259,40 @@ impl UniOp {
     }
 }
 
+fn consume<T>(tokens: &mut Peekable<T>, kind: TokenKind) -> Result<Loc>
+where
+    T: Iterator<Item = Token>,
+{
+    match tokens.next() {
+        Some(token) => {
+            if token.value == kind {
+                Ok(token.loc)
+            } else {
+                Err(ParseError::NeedTokenBefore(token, vec![kind]))
+            }
+        }
+        None => Err(ParseError::Eof),
+    }
+}
 
 /// Parse tokens with following rules
 ///
-/// program    = stmt*
-/// stmt       = expr ";"
-///            | "return" expr ";"
-/// expr       = assign
-/// assign     = equality ("=" assign)?
-/// equality   = relational ("==" relational | "!=" relational)*
-/// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
-/// add        = mul ("+" mul | "-" mul)*
-/// mul        = unary ("*" unary | "/" unary)*
-/// unary      = ("+" | "-")? term
-/// term       = num | ident | "(" expr ")"
+/// program     = stmt*
+/// stmt        = expr ";"
+///             | stmt_if
+// ///             | "while" "(" expr ")" stmt
+// ///             | "for" "(" expr? ";" expr? ";" expr? ")" stmt
+///             | stmt_return
+/// stmt_if     = "if" "(" expr ")" stmt ("else" stmt)?
+/// stmt_return = "return" expr ";"
+/// expr        = assign
+/// assign      = equality ("=" assign)?
+/// equality    = relational ("==" relational | "!=" relational)*
+/// relational  = add ("<" add | "<=" add | ">" add | ">=" add)*
+/// add         = mul ("+" mul | "-" mul)*
+/// mul         = unary ("*" unary | "/" unary)*
+/// unary       = ("+" | "-")? term
+/// term        = num | ident | "(" expr ")"
 fn parse(tokens: Vec<Token>) -> Result<Ast> {
     debug!("parse --");
 
@@ -260,7 +309,7 @@ fn parse(tokens: Vec<Token>) -> Result<Ast> {
 
 /// Parse program
 ///
-/// program    = stmt*
+/// program     = stmt*
 fn parse_program<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -283,46 +332,85 @@ where
 
 /// Parse stmt
 ///
-/// stmt       = expr ";"
-///            | "return" expr ";"
+/// stmt        = expr ";"
+///             | stmt_if
+// ///             | "while" "(" expr ")" stmt
+// ///             | "for" "(" expr? ";" expr? ";" expr? ")" stmt
+///             | stmt_return
 fn parse_stmt<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
     debug!("parse_stmt --");
 
-    let e = match tokens.peek() {
-        Some(Token {
-            value: TokenKind::Keyword(Keyword::Return),
-            ..
-        }) => {
-            let loc = tokens.next().unwrap().loc;
+    let stmt = match tokens.peek().map(|token| &token.value) {
+        Some(TokenKind::Keyword(Keyword::If)) => parse_stmt_if(tokens)?,
+        Some(TokenKind::Keyword(Keyword::Return)) => parse_stmt_return(tokens)?,
+        _ => {
             let e = parse_expr(tokens)?;
-            let loc = loc.merge(&e.loc);
-            Ast::ret(e, loc)
+            let semi_loc = consume(tokens, TokenKind::Semicolon)?;
+            Ast::new(e.value, e.loc.merge(&semi_loc))
         }
-        _ => parse_expr(tokens)?,
     };
 
-    let ret = match tokens.next() {
-        Some(Token {
-            value: TokenKind::Semicolon,
-            loc,
-        }) => Ok(Ast::new(e.value, e.loc.merge(&loc))),
-        Some(token) => Err(ParseError::NeedTokenBefore(
-            token,
-            vec![TokenKind::Semicolon],
-        )),
-        None => Err(ParseError::Eof),
-    };
-
+    let ret = Ok(stmt);
     debug!("parse_stmt: {:?}", ret);
+    ret
+}
+
+/// Parse stmt_if
+///
+/// stmt_if     = "if" "(" expr ")" stmt ("else" stmt)?
+fn parse_stmt_if<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_stmt_if --");
+
+    let if_loc = consume(tokens, TokenKind::Keyword(Keyword::If))?;
+    consume(tokens, TokenKind::LParen)?;
+    let cond = parse_expr(tokens)?;
+    consume(tokens, TokenKind::RParen)?;
+    let stmt = parse_stmt(tokens)?;
+
+    let ret = match tokens.peek().map(|token| &token.value) {
+        Some(TokenKind::Keyword(Keyword::Else)) => {
+            tokens.next();
+            let els = parse_stmt(tokens)?;
+            let loc = if_loc.merge(&els.loc);
+            Ok(Ast::stmt_if(cond, stmt, Some(els), loc))
+        }
+        _ => {
+            let loc = if_loc.merge(&stmt.loc);
+            Ok(Ast::stmt_if(cond, stmt, None, loc))
+        }
+    };
+
+    debug!("parse_stmt_if: {:?}", ret);
+    ret
+}
+
+/// Parse stmt_return
+///
+/// stmt_return = "return" expr ";"
+fn parse_stmt_return<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_stmt_return --");
+
+    let ret_loc = consume(tokens, TokenKind::Keyword(Keyword::Return))?;
+    let e = parse_expr(tokens)?;
+    let semi_loc = consume(tokens, TokenKind::Semicolon)?;
+    let ret = Ok(Ast::ret(e, ret_loc.merge(&semi_loc)));
+
+    debug!("parse_stmt_return: {:?}", ret);
     ret
 }
 
 /// Parse expr
 ///
-/// expr       = assign
+/// expr        = assign
 fn parse_expr<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -337,7 +425,7 @@ where
 
 /// Parse assign
 ///
-/// assign     = equality ("=" assign)?
+/// assign      = equality ("=" assign)?
 fn parse_assign<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -365,7 +453,7 @@ where
 
 /// Parse equality
 ///
-/// equality   = relational ("==" relational | "!=" relational)*
+/// equality    = relational ("==" relational | "!=" relational)*
 fn parse_equality<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -392,7 +480,7 @@ where
 
 /// Parse relational
 ///
-/// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
+/// relational  = add ("<" add | "<=" add | ">" add | ">=" add)*
 fn parse_relational<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -421,7 +509,7 @@ where
 
 /// Parse add
 ///
-/// add        = mul ("+" mul | "-" mul)*
+/// add         = mul ("+" mul | "-" mul)*
 fn parse_add<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -448,7 +536,7 @@ where
 
 /// Parse mul
 ///
-/// mul        = unary ("*" unary | "/" unary)*
+/// mul         = unary ("*" unary | "/" unary)*
 fn parse_mul<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -475,7 +563,7 @@ where
 
 /// Parse unary
 ///
-/// unary      = ("+" | "-")? term
+/// unary       = ("+" | "-")? term
 fn parse_unary<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -508,7 +596,7 @@ where
 
 /// Parse term
 ///
-/// term       = num | ident | "(" expr ")"
+/// term        = num | ident | "(" expr ")"
 fn parse_term<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
