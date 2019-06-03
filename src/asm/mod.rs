@@ -216,23 +216,6 @@ pub enum Reg {
     RDI,
 }
 
-// impl fmt::Display for Reg {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         use Reg::*;
-//         match self {
-//             AL => write!(f, "al"),
-//             RAX => write!(f, "rax"),
-//             RBX => write!(f, "rbx"),
-//             RCX => write!(f, "rcx"),
-//             RDX => write!(f, "rdx"),
-//             RBP => write!(f, "rbp"),
-//             RSP => write!(f, "rsp"),
-//             RSI => write!(f, "rsi"),
-//             RDI => write!(f, "rdi"),
-//         }
-//     }
-// }
-
 #[cfg(test)]
 mod tests {
     use super::*;
