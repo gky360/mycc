@@ -264,8 +264,8 @@ impl<'a> Lexer<'a> {
             }
 
             match self.input[pos] {
-                b'0'...b'9' => lex_a_token!(self.lex_number()),
-                b'a'...b'z' | b'A'...b'Z' | b'_' => lex_a_token!(self.lex_keyword_or_ident()),
+                b'0'..=b'9' => lex_a_token!(self.lex_number()),
+                b'a'..=b'z' | b'A'..=b'Z' | b'_' => lex_a_token!(self.lex_keyword_or_ident()),
                 b'+' => lex_a_token!(self.lex_plus()),
                 b'-' => lex_a_token!(self.lex_minus()),
                 b'*' => lex_a_token!(self.lex_asterisk()),
