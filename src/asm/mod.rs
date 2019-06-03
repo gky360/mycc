@@ -82,18 +82,15 @@ impl fmt::Display for Function {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct Label {
-    name: String,
+    name: &'static str,
     id: usize,
 }
 
 impl Label {
-    pub fn new(name: &str, id: usize) -> Self {
-        Label {
-            name: String::from(name),
-            id,
-        }
+    pub fn new(name: &'static str, id: usize) -> Self {
+        Label { name, id }
     }
 }
 
@@ -116,6 +113,7 @@ pub enum Ins {
     IDIV(Opr),
     IMUL(Opr),
     JE(Label),
+    JMP(Label),
     MOV(Opr, Opr),
     MOVZB(Opr, Opr),
     POP(Opr),
@@ -147,6 +145,7 @@ impl fmt::Display for Ins {
             IDIV(opr) => write!(f, "idiv {}", opr),
             IMUL(opr) => write!(f, "imul {}", opr),
             JE(label) => write!(f, "je {}", label),
+            JMP(label) => write!(f, "jmp {}", label),
             MOV(opr1, opr2) => write!(f, "mov {}, {}", opr1, opr2),
             MOVZB(opr1, opr2) => write!(f, "movzb {}, {}", opr1, opr2),
             POP(opr) => write!(f, "pop {}", opr),

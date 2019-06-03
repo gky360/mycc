@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::asm::{Assembly, Ent, Function, Ins, Opr, Reg};
+use crate::asm::{Assembly, Ent, Function, Ins, Label, Opr, Reg};
 use crate::lexer::{Annot, Loc};
 use crate::parser::{Ast, AstNode, BinOp, BinOpKind, UniOp, UniOpKind};
 
@@ -23,9 +23,12 @@ impl CompileError {
     fn new(kind: CompileErrorKind, loc: Loc) -> Self {
         CompileError(Annot::new(kind, loc))
     }
+
     fn lval_required(loc: Loc) -> Self {
         CompileError::new(CompileErrorKind::LValRequired, loc)
     }
+
+    #[allow(dead_code)]
     fn not_implemented(loc: Loc) -> Self {
         CompileError::new(CompileErrorKind::NotImplemented, loc)
     }
@@ -144,10 +147,11 @@ impl<'a> Compiler<'a> {
     fn compile_ast(&mut self, ast: &'a Ast) -> Result<()> {
         match ast.value {
             AstNode::Statements(ref stmts) => self.compile_statements(stmts),
-            AstNode::StatementIf { .. } => {
-                // TODO: generate assembly
-                Err(CompileError::not_implemented(ast.loc.clone()))
-            }
+            AstNode::StatementIf {
+                ref cond,
+                ref stmt,
+                ref els,
+            } => self.compile_stmt_if(cond, stmt, els),
             AstNode::Num(num) => self.compile_num(num),
             AstNode::Ident(_) => self.compile_ident(ast),
             AstNode::BinOp {
@@ -158,6 +162,54 @@ impl<'a> Compiler<'a> {
             AstNode::UniOp { ref op, ref e } => self.compile_uniop(op, e),
             AstNode::Ret { ref e } => self.compile_ret(e),
         }
+    }
+
+    fn compile_statements(&mut self, stmts: &'a Vec<Ast>) -> Result<()> {
+        use Opr::*;
+        use Reg::*;
+
+        for ast in stmts {
+            self.compile_ast(ast)?;
+            self.inss.push(Ins::POP(Direct(RAX)));
+        }
+
+        Ok(())
+    }
+
+    fn compile_stmt_if(
+        &mut self,
+        cond: &'a Ast,
+        stmt: &'a Ast,
+        els: &'a Option<Box<Ast>>,
+    ) -> Result<()> {
+        use Opr::*;
+        use Reg::*;
+
+        self.compile_ast(cond)?;
+
+        let id = self.increment_label_id();
+        self.inss.push(Ins::POP(Direct(RAX)));
+        self.inss.push(Ins::CMP(Direct(RAX), Literal(0)));
+
+        let label_end = Label::new("end", id);
+        match els {
+            None => {
+                self.inss.push(Ins::JE(label_end));
+                self.compile_ast(stmt)?;
+            }
+            Some(els) => {
+                let label_else = Label::new("else", id);
+                self.inss.push(Ins::JE(label_else));
+                self.compile_ast(stmt)?;
+                self.inss.push(Ins::JMP(label_end));
+
+                self.inss.push(Ins::DefLabel(label_else));
+                self.compile_ast(els)?;
+            }
+        }
+        self.inss.push(Ins::DefLabel(label_end));
+
+        Ok(())
     }
 
     fn compile_num(&mut self, num: u64) -> Result<()> {
@@ -263,18 +315,6 @@ impl<'a> Compiler<'a> {
         self.inss.push(Ins::MOV(Direct(RSP), Direct(RBP)));
         self.inss.push(Ins::POP(Direct(RBP)));
         self.inss.push(Ins::RET);
-
-        Ok(())
-    }
-
-    fn compile_statements(&mut self, stmts: &'a Vec<Ast>) -> Result<()> {
-        use Opr::*;
-        use Reg::*;
-
-        for ast in stmts {
-            self.compile_ast(ast)?;
-            self.inss.push(Ins::POP(Direct(RAX)));
-        }
 
         Ok(())
     }
