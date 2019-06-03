@@ -24,7 +24,7 @@ impl fmt::Display for Assembly {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Ent {
     /// e.g. `.intel_syntax noprefix`
-    Dot(String, String),
+    Dot(&'static str, &'static str),
     /// e.g. `main:`
     Fun(Function),
     /// empty line
@@ -33,8 +33,8 @@ pub enum Ent {
 }
 
 impl Ent {
-    pub fn dot(name: &str, content: &str) -> Ent {
-        Ent::Dot(String::from(name), String::from(content))
+    pub fn dot(name: &'static str, content: &'static str) -> Ent {
+        Ent::Dot(name, content)
     }
 
     pub fn raw(content: &str) -> Ent {
