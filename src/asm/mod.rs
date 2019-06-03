@@ -55,32 +55,67 @@ impl fmt::Display for Ent {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Function(String, Vec<Ins>);
+pub struct Function {
+    name: String,
+    instructions: Vec<Ins>,
+}
 
 impl Function {
-    pub fn new(name: &str, instructions: Vec<Ins>) -> Function {
-        Function(String::from(name), instructions)
+    pub fn new(name: &str, instructions: Vec<Ins>) -> Self {
+        Function {
+            name: String::from(name),
+            instructions,
+        }
     }
 }
 
 impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "{}:", self.0)?;
-        for ins in self.1.iter() {
-            writeln!(f, "{}{}", INDENT, ins)?;
+        writeln!(f, "{}:", self.name)?;
+        for ins in self.instructions.iter() {
+            match ins {
+                Ins::DefLabel(label) => writeln!(f, "{}:", label)?,
+                ins => writeln!(f, "{}{}", INDENT, ins)?,
+            }
         }
         Ok(())
     }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct Label {
+    name: String,
+    id: usize,
+}
+
+impl Label {
+    pub fn new(name: &str, id: usize) -> Self {
+        Label {
+            name: String::from(name),
+            id,
+        }
+    }
+}
+
+impl fmt::Display for Label {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, ".L{}_{:>08x}", self.name, self.id)
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Ins {
+    /// define label
+    /// e.g. `.Lend_xxx:`
+    DefLabel(Label),
+
     ADD(Opr, Opr),
     CALL(String),
     CMP(Opr, Opr),
     CQO,
     IDIV(Opr),
     IMUL(Opr),
+    JE(Label),
     MOV(Opr, Opr),
     MOVZB(Opr, Opr),
     POP(Opr),
@@ -103,12 +138,15 @@ impl fmt::Display for Ins {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Ins::*;
         match self {
+            DefLabel(label) => write!(f, "{}", label),
+
             ADD(opr1, opr2) => write!(f, "add {}, {}", opr1, opr2),
             CQO => write!(f, "cqo"),
             CALL(name) => write!(f, "call {}", name),
             CMP(opr1, opr2) => write!(f, "cmp {}, {}", opr1, opr2),
             IDIV(opr) => write!(f, "idiv {}", opr),
             IMUL(opr) => write!(f, "imul {}", opr),
+            JE(label) => write!(f, "je {}", label),
             MOV(opr1, opr2) => write!(f, "mov {}, {}", opr1, opr2),
             MOVZB(opr1, opr2) => write!(f, "movzb {}, {}", opr1, opr2),
             POP(opr) => write!(f, "pop {}", opr),

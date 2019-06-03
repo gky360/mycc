@@ -65,6 +65,7 @@ impl fmt::Display for CompileError {
 pub struct Compiler<'a> {
     inss: Vec<Ins>,
     var_offset: HashMap<&'a str, u64>,
+    next_label_id: usize,
 }
 
 impl<'a> Compiler<'a> {
@@ -72,7 +73,14 @@ impl<'a> Compiler<'a> {
         Compiler {
             inss: Vec::new(),
             var_offset: HashMap::new(),
+            next_label_id: 0,
         }
+    }
+
+    fn increment_label_id(&mut self) -> usize {
+        let label_id = self.next_label_id;
+        self.next_label_id += 1;
+        label_id
     }
 
     pub fn compile(&mut self, ast: &'a Ast) -> Result<Assembly> {
@@ -136,7 +144,10 @@ impl<'a> Compiler<'a> {
     fn compile_ast(&mut self, ast: &'a Ast) -> Result<()> {
         match ast.value {
             AstNode::Statements(ref stmts) => self.compile_statements(stmts),
-            AstNode::StatementIf { .. } => Err(CompileError::not_implemented(ast.loc.clone())),
+            AstNode::StatementIf { .. } => {
+                // TODO: generate assembly
+                Err(CompileError::not_implemented(ast.loc.clone()))
+            }
             AstNode::Num(num) => self.compile_num(num),
             AstNode::Ident(_) => self.compile_ident(ast),
             AstNode::BinOp {
