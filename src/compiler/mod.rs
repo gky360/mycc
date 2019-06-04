@@ -152,6 +152,13 @@ impl<'a> Compiler<'a> {
                 ref stmt,
                 ref els,
             } => self.compile_stmt_if(cond, stmt, els),
+            AstNode::StatementWhile { ref cond, ref stmt } => self.compile_stmt_while(cond, stmt),
+            AstNode::StatementFor {
+                ref init,
+                ref cond,
+                ref incr,
+                ref stmt,
+            } => self.compile_stmt_for(init, cond, incr, stmt),
             AstNode::Num(num) => self.compile_num(num),
             AstNode::Ident(_) => self.compile_ident(ast),
             AstNode::BinOp {
@@ -196,17 +203,79 @@ impl<'a> Compiler<'a> {
             None => {
                 self.inss.push(Ins::JE(label_end));
                 self.compile_ast(stmt)?;
+                self.inss.push(Ins::POP(Direct(RAX)));
             }
             Some(els) => {
                 let label_else = Label::new("else", id);
                 self.inss.push(Ins::JE(label_else));
                 self.compile_ast(stmt)?;
+                self.inss.push(Ins::POP(Direct(RAX)));
                 self.inss.push(Ins::JMP(label_end));
 
                 self.inss.push(Ins::DefLabel(label_else));
                 self.compile_ast(els)?;
+                self.inss.push(Ins::POP(Direct(RAX)));
             }
         }
+        self.inss.push(Ins::DefLabel(label_end));
+        self.inss.push(Ins::PUSH(Direct(RAX)));
+
+        Ok(())
+    }
+
+    fn compile_stmt_while(&mut self, cond: &'a Ast, stmt: &'a Ast) -> Result<()> {
+        use Opr::*;
+        use Reg::*;
+
+        let id = self.increment_label_id();
+        let label_begin = Label::new("begin", id);
+        let label_end = Label::new("end", id);
+
+        self.inss.push(Ins::DefLabel(label_begin));
+        self.compile_ast(cond)?;
+        self.inss.push(Ins::POP(Direct(RAX)));
+        self.inss.push(Ins::CMP(Direct(RAX), Literal(0)));
+        self.inss.push(Ins::JE(label_end));
+        self.compile_ast(stmt)?;
+        self.inss.push(Ins::POP(Direct(RAX)));
+        self.inss.push(Ins::JMP(label_begin));
+        self.inss.push(Ins::DefLabel(label_end));
+        self.inss.push(Ins::PUSH(Direct(RAX)));
+
+        Ok(())
+    }
+
+    fn compile_stmt_for(
+        &mut self,
+        init: &'a Option<Box<Ast>>,
+        cond: &'a Option<Box<Ast>>,
+        incr: &'a Option<Box<Ast>>,
+        stmt: &'a Ast,
+    ) -> Result<()> {
+        use Opr::*;
+        use Reg::*;
+
+        let id = self.increment_label_id();
+        let label_begin = Label::new("begin", id);
+        let label_end = Label::new("end", id);
+
+        if let Some(init) = init {
+            self.compile_ast(init)?;
+            self.inss.push(Ins::POP(Direct(RAX)));
+        }
+        self.inss.push(Ins::DefLabel(label_begin));
+        if let Some(cond) = cond {
+            self.compile_ast(cond)?;
+            self.inss.push(Ins::POP(Direct(RAX)));
+            self.inss.push(Ins::CMP(Direct(RAX), Literal(0)));
+            self.inss.push(Ins::JE(label_end));
+        }
+        self.compile_ast(stmt)?;
+        if let Some(incr) = incr {
+            self.compile_ast(incr)?;
+            self.inss.push(Ins::POP(Direct(RAX)));
+        }
+        self.inss.push(Ins::JMP(label_begin));
         self.inss.push(Ins::DefLabel(label_end));
         self.inss.push(Ins::PUSH(Direct(RAX)));
 
