@@ -104,14 +104,14 @@ impl<T> Annot<T> {
 pub enum Keyword {
     #[strum(serialize = "else")]
     Else,
-    // #[strum(serialize = "for")]
-    // For,
+    #[strum(serialize = "for")]
+    For,
     #[strum(serialize = "if")]
     If,
     #[strum(serialize = "return")]
     Return,
-    // #[strum(serialize = "while")]
-    // While,
+    #[strum(serialize = "while")]
+    While,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
