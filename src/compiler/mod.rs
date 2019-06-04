@@ -203,15 +203,18 @@ impl<'a> Compiler<'a> {
             None => {
                 self.inss.push(Ins::JE(label_end));
                 self.compile_ast(stmt)?;
+                self.inss.push(Ins::POP(Direct(RAX)));
             }
             Some(els) => {
                 let label_else = Label::new("else", id);
                 self.inss.push(Ins::JE(label_else));
                 self.compile_ast(stmt)?;
+                self.inss.push(Ins::POP(Direct(RAX)));
                 self.inss.push(Ins::JMP(label_end));
 
                 self.inss.push(Ins::DefLabel(label_else));
                 self.compile_ast(els)?;
+                self.inss.push(Ins::POP(Direct(RAX)));
             }
         }
         self.inss.push(Ins::DefLabel(label_end));
@@ -234,6 +237,7 @@ impl<'a> Compiler<'a> {
         self.inss.push(Ins::CMP(Direct(RAX), Literal(0)));
         self.inss.push(Ins::JE(label_end));
         self.compile_ast(stmt)?;
+        self.inss.push(Ins::POP(Direct(RAX)));
         self.inss.push(Ins::JMP(label_begin));
         self.inss.push(Ins::DefLabel(label_end));
         self.inss.push(Ins::PUSH(Direct(RAX)));
@@ -257,6 +261,7 @@ impl<'a> Compiler<'a> {
 
         if let Some(init) = init {
             self.compile_ast(init)?;
+            self.inss.push(Ins::POP(Direct(RAX)));
         }
         self.inss.push(Ins::DefLabel(label_begin));
         if let Some(cond) = cond {
@@ -268,6 +273,7 @@ impl<'a> Compiler<'a> {
         self.compile_ast(stmt)?;
         if let Some(incr) = incr {
             self.compile_ast(incr)?;
+            self.inss.push(Ins::POP(Direct(RAX)));
         }
         self.inss.push(Ins::JMP(label_begin));
         self.inss.push(Ins::DefLabel(label_end));
