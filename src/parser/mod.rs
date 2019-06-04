@@ -113,16 +113,16 @@ pub enum AstNode {
         stmt: Box<Ast>,
         els: Option<Box<Ast>>,
     },
-    // While {
-    //     cond: Box<Ast>,
-    //     stmt: Box<Ast>,
-    // },
-    // For {
-    //     init: Option<Box<Ast>>,
-    //     cond: Option<Box<Ast>>,
-    //     incr: Option<Box<Ast>>,
-    //     stmt: Box<Ast>,
-    // },
+    StatementWhile {
+        cond: Box<Ast>,
+        stmt: Box<Ast>,
+    },
+    StatementFor {
+        init: Option<Box<Ast>>,
+        cond: Option<Box<Ast>>,
+        incr: Option<Box<Ast>>,
+        stmt: Box<Ast>,
+    },
     Num(u64),
     Ident(String),
     BinOp {
@@ -151,6 +151,32 @@ impl Ast {
                 cond: Box::new(cond),
                 stmt: Box::new(stmt),
                 els: els.map(|els| Box::new(els)),
+            },
+            loc,
+        )
+    }
+    fn stmt_while(cond: Ast, stmt: Ast, loc: Loc) -> Self {
+        Self::new(
+            AstNode::StatementWhile {
+                cond: Box::new(cond),
+                stmt: Box::new(stmt),
+            },
+            loc,
+        )
+    }
+    fn stmt_for(
+        init: Option<Ast>,
+        cond: Option<Ast>,
+        incr: Option<Ast>,
+        stmt: Ast,
+        loc: Loc,
+    ) -> Self {
+        Self::new(
+            AstNode::StatementFor {
+                init: init.map(|init| Box::new(init)),
+                cond: cond.map(|cond| Box::new(cond)),
+                incr: incr.map(|incr| Box::new(incr)),
+                stmt: Box::new(stmt),
             },
             loc,
         )
@@ -280,10 +306,12 @@ where
 /// program     = stmt*
 /// stmt        = expr ";"
 ///             | stmt_if
-// ///             | "while" "(" expr ")" stmt
-// ///             | "for" "(" expr? ";" expr? ";" expr? ")" stmt
+///             | stmt_while
+///             | stmt_for
 ///             | stmt_return
 /// stmt_if     = "if" "(" expr ")" stmt ("else" stmt)?
+/// stmt_while  = "while" "(" expr ")" stmt
+/// stmt_for    = "for" "(" expr? ";" expr? ";" expr? ")" stmt
 /// stmt_return = "return" expr ";"
 /// expr        = assign
 /// assign      = equality ("=" assign)?
@@ -334,8 +362,8 @@ where
 ///
 /// stmt        = expr ";"
 ///             | stmt_if
-// ///             | "while" "(" expr ")" stmt
-// ///             | "for" "(" expr? ";" expr? ";" expr? ")" stmt
+///             | stmt_while
+///             | stmt_for
 ///             | stmt_return
 fn parse_stmt<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
@@ -345,6 +373,8 @@ where
 
     let stmt = match tokens.peek().map(|token| &token.value) {
         Some(TokenKind::Keyword(Keyword::If)) => parse_stmt_if(tokens)?,
+        Some(TokenKind::Keyword(Keyword::While)) => parse_stmt_while(tokens)?,
+        Some(TokenKind::Keyword(Keyword::For)) => parse_stmt_for(tokens)?,
         Some(TokenKind::Keyword(Keyword::Return)) => parse_stmt_return(tokens)?,
         _ => {
             let e = parse_expr(tokens)?;
@@ -387,6 +417,63 @@ where
     };
 
     debug!("parse_stmt_if: {:?}", ret);
+    ret
+}
+
+/// Parse stmt_while
+///
+/// stmt_while  = "while" "(" expr ")" stmt
+fn parse_stmt_while<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_stmt_while --");
+
+    let while_loc = consume(tokens, TokenKind::Keyword(Keyword::While))?;
+    consume(tokens, TokenKind::LParen)?;
+    let cond = parse_expr(tokens)?;
+    consume(tokens, TokenKind::RParen)?;
+    let stmt = parse_stmt(tokens)?;
+
+    let loc = while_loc.merge(&stmt.loc);
+    let ret = Ok(Ast::stmt_while(cond, stmt, loc));
+
+    debug!("parse_stmt_while: {:?}", ret);
+    ret
+}
+
+/// Parse stmt_for
+///
+/// stmt_for    = "for" "(" expr? ";" expr? ";" expr? ")" stmt
+fn parse_stmt_for<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_stmt_for --");
+
+    let for_loc = consume(tokens, TokenKind::Keyword(Keyword::For))?;
+    consume(tokens, TokenKind::LParen)?;
+    let init = match tokens.peek().map(|token| &token.value) {
+        Some(TokenKind::Semicolon) => None,
+        _ => Some(parse_expr(tokens)?),
+    };
+    consume(tokens, TokenKind::Semicolon)?;
+    let cond = match tokens.peek().map(|token| &token.value) {
+        Some(TokenKind::Semicolon) => None,
+        _ => Some(parse_expr(tokens)?),
+    };
+    consume(tokens, TokenKind::Semicolon)?;
+    let incr = match tokens.peek().map(|token| &token.value) {
+        Some(TokenKind::Semicolon) => None,
+        _ => Some(parse_expr(tokens)?),
+    };
+    consume(tokens, TokenKind::RParen)?;
+    let stmt = parse_stmt(tokens)?;
+
+    let loc = for_loc.merge(&stmt.loc);
+    let ret = Ok(Ast::stmt_for(init, cond, incr, stmt, loc));
+
+    debug!("parse_stmt_for: {:?}", ret);
     ret
 }
 

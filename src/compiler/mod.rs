@@ -152,6 +152,8 @@ impl<'a> Compiler<'a> {
                 ref stmt,
                 ref els,
             } => self.compile_stmt_if(cond, stmt, els),
+            AstNode::StatementWhile { .. } => Err(CompileError::not_implemented(ast.loc.clone())),
+            AstNode::StatementFor { .. } => Err(CompileError::not_implemented(ast.loc.clone())),
             AstNode::Num(num) => self.compile_num(num),
             AstNode::Ident(_) => self.compile_ident(ast),
             AstNode::BinOp {
