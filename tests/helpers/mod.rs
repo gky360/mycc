@@ -31,6 +31,7 @@ fn testdata_path(name: &str) -> PathBuf {
 fn compile(asm_path: &Path, exec_path: &Path) -> io::Result<Output> {
     Command::new("gcc")
         .args(&[
+            "-fstack-protector",
             "-o",
             exec_path.to_str().unwrap(),
             asm_path.to_str().unwrap(),
