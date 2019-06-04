@@ -101,3 +101,13 @@ fn step_12_1_control_flow() {
         assert_exit_status("step_12_1/valid/multiple_if.c", &[], 8);
     });
 }
+
+#[test]
+fn step_12_2_control_flow() {
+    run_test(|| {
+        assert_exit_status("step_12_2/valid/for_decl.c", &[], 3);
+        assert_exit_status("step_12_2/valid/for.c", &[], 3);
+        assert_exit_status("step_12_2/valid/return_in_while.c", &[], 2);
+        assert_exit_status("step_12_2/valid/while_single_statement.c", &[], 6);
+    });
+}

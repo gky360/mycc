@@ -37,10 +37,21 @@ fn test_step_09_single_char_variable() {
 }
 
 #[test]
-fn test_step_12_control_flow() {
+fn test_step_12_1_control_flow() {
     let names = vec![
         "step_12_1/invalid/if_assignment.c",
         "step_12_1/invalid/mismatched_nesting.c",
+    ];
+    names.iter().for_each(|name| assert_parse_error(name))
+}
+
+#[test]
+fn test_step_12_2_control_flow() {
+    let names = vec![
+        "step_12_2/invalid/syntax_err_empty_clause.c",
+        "step_12_2/invalid/syntax_err_paren_mismatch.c",
+        "step_12_2/invalid/syntax_err_too_few_for_clauses.c",
+        "step_12_2/invalid/syntax_err_too_many_for_clauses.c",
     ];
     names.iter().for_each(|name| assert_parse_error(name))
 }
