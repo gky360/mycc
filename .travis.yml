@@ -74,11 +74,11 @@ after_success: |
 
 cache: cargo
 before_cache: |
-  # Travis can't cache files that are not readable by "others"
-  chmod -R a+r $HOME/.cargo
   if [[ "$TRAVIS_RUST_VERSION" == stable ]]; then
     cargo install cargo-tarpaulin -f
   fi
+  # Travis can't cache files that are not readable by "others"
+  chmod -R a+r $HOME/.cargo
 
 branches:
   only:
