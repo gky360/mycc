@@ -5,6 +5,10 @@ use std::ops::FnMut;
 use std::str::{from_utf8, FromStr};
 use strum_macros::{Display, EnumString};
 
+#[cfg(test)]
+#[cfg_attr(tarpaulin, skip)]
+mod tests;
+
 pub type Result<T> = std::result::Result<T, LexError>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -424,51 +428,5 @@ impl<'a> Lexer<'a> {
     fn skip_spaces(&self) -> Result<()> {
         self.recognize_many(|b| b" \n\t".contains(&b));
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_annotate() {
-        let input = r##"
-a = 2
-a = a + 4;
-b = 3 + a;
-c = 3 + b;
-"##;
-        let loc = Loc(3, 21);
-        let mut annotated = String::new();
-        assert!(loc.annotate(&mut annotated, &input).is_ok());
-        assert_eq!(
-            annotated,
-            r##"2 | a = 2
-  |   ^^^^
-3 | a = a + 4;
-  | ^^^^^^^^^^^
-4 | b = 3 + a;
-  | ^^^
-"##
-        );
-    }
-
-    #[test]
-    fn test_lexer() {
-        let lexer = Lexer::new("1 + 2 * 3 - -10");
-        assert_eq!(
-            lexer.lex(),
-            Ok(vec![
-                Token::number(1, Loc(0, 1)),
-                Token::plus(Loc(2, 3)),
-                Token::number(2, Loc(4, 5)),
-                Token::asterisk(Loc(6, 7)),
-                Token::number(3, Loc(8, 9)),
-                Token::minus(Loc(10, 11)),
-                Token::minus(Loc(12, 13)),
-                Token::number(10, Loc(13, 15)),
-            ])
-        )
     }
 }

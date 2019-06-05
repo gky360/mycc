@@ -6,6 +6,7 @@ use crate::lexer::{Annot, Loc};
 use crate::parser::{Ast, AstNode, BinOp, BinOpKind, UniOp, UniOpKind};
 
 #[cfg(test)]
+#[cfg_attr(tarpaulin, skip)]
 mod tests;
 
 pub type Result<T> = std::result::Result<T, CompileError>;
