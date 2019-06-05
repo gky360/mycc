@@ -107,17 +107,17 @@ impl fmt::Display for ParseError {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AstNode {
-    Statements(Vec<Ast>),
-    StatementIf {
+    Block(Vec<Ast>),
+    StmtIf {
         cond: Box<Ast>,
         stmt: Box<Ast>,
         els: Option<Box<Ast>>,
     },
-    StatementWhile {
+    StmtWhile {
         cond: Box<Ast>,
         stmt: Box<Ast>,
     },
-    StatementFor {
+    StmtFor {
         init: Option<Box<Ast>>,
         cond: Option<Box<Ast>>,
         incr: Option<Box<Ast>>,
@@ -142,12 +142,12 @@ pub enum AstNode {
 pub type Ast = Annot<AstNode>;
 
 impl Ast {
-    fn statements(stmts: Vec<Ast>, loc: Loc) -> Self {
-        Self::new(AstNode::Statements(stmts), loc)
+    fn block(stmts: Vec<Ast>, loc: Loc) -> Self {
+        Self::new(AstNode::Block(stmts), loc)
     }
     fn stmt_if(cond: Ast, stmt: Ast, els: Option<Ast>, loc: Loc) -> Self {
         Self::new(
-            AstNode::StatementIf {
+            AstNode::StmtIf {
                 cond: Box::new(cond),
                 stmt: Box::new(stmt),
                 els: els.map(|els| Box::new(els)),
@@ -157,7 +157,7 @@ impl Ast {
     }
     fn stmt_while(cond: Ast, stmt: Ast, loc: Loc) -> Self {
         Self::new(
-            AstNode::StatementWhile {
+            AstNode::StmtWhile {
                 cond: Box::new(cond),
                 stmt: Box::new(stmt),
             },
@@ -172,7 +172,7 @@ impl Ast {
         loc: Loc,
     ) -> Self {
         Self::new(
-            AstNode::StatementFor {
+            AstNode::StmtFor {
                 init: init.map(|init| Box::new(init)),
                 cond: cond.map(|cond| Box::new(cond)),
                 incr: incr.map(|incr| Box::new(incr)),
@@ -352,7 +352,7 @@ where
         loc = loc.merge(&stmt.loc);
         stmts.push(stmt);
     }
-    let ret = Ok(Ast::statements(stmts, loc));
+    let ret = Ok(Ast::block(stmts, loc));
 
     debug!("parse_program: {:?}", ret);
     ret

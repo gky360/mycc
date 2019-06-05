@@ -146,14 +146,14 @@ impl<'a> Compiler<'a> {
 
     fn compile_ast(&mut self, ast: &'a Ast) -> Result<()> {
         match ast.value {
-            AstNode::Statements(ref stmts) => self.compile_statements(stmts),
-            AstNode::StatementIf {
+            AstNode::Block(ref stmts) => self.compile_statements(stmts),
+            AstNode::StmtIf {
                 ref cond,
                 ref stmt,
                 ref els,
             } => self.compile_stmt_if(cond, stmt, els),
-            AstNode::StatementWhile { ref cond, ref stmt } => self.compile_stmt_while(cond, stmt),
-            AstNode::StatementFor {
+            AstNode::StmtWhile { ref cond, ref stmt } => self.compile_stmt_while(cond, stmt),
+            AstNode::StmtFor {
                 ref init,
                 ref cond,
                 ref incr,
