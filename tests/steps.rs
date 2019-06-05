@@ -115,7 +115,7 @@ fn step_12_2_control_flow() {
 #[test]
 fn step_13_compound_statement() {
     run_test(|| {
-        assert_exit_status("step_13/valid/return_in_while.c", &[], 3);
-        assert_exit_status("step_13/valid/while_multi_statement.c", &[], 3);
+        assert_exit_status("step_13/valid/return_in_while.c", &[], 2);
+        assert_exit_status("step_13/valid/while_multi_statement.c", &[], 6);
     });
 }
