@@ -43,7 +43,7 @@ fn exec(exec_path: &Path, args: &[&OsStr]) -> io::Result<Output> {
     Command::new(exec_path).args(args).output()
 }
 
-fn compile_and_exec(testdata_name: &str, args: &[&OsStr]) -> mycc::Result<Output> {
+fn compile_and_exec(testdata_name: &str, args: &[&OsStr]) -> Output {
     let tmp_dir = TempDir::new("mycc").expect("failed to create temp dir");
     let exec_path = tmp_dir.path().join("a.out");
     let opt = {
@@ -54,7 +54,7 @@ fn compile_and_exec(testdata_name: &str, args: &[&OsStr]) -> mycc::Result<Output
     debug!("tmp_dir: {:?}", tmp_dir);
     debug!("exec_path: {:?}", exec_path);
 
-    mycc::run(&opt)?;
+    mycc::run(&opt).expect(&format!("failed to run mycc for {}", testdata_name));
 
     let compile_output = compile(&opt.output, &exec_path).expect("failed to compile");
     debug!("compile_output: {:?}", compile_output);
@@ -65,11 +65,16 @@ fn compile_and_exec(testdata_name: &str, args: &[&OsStr]) -> mycc::Result<Output
     let exec_output = exec(&exec_path, &args).expect("failed to execute");
     debug!("exec_output: {:?}", exec_output);
 
-    Ok(exec_output)
+    exec_output
 }
 
 pub fn assert_exit_status(testdata_name: &str, args: &[&OsStr], exit_code: i32) {
-    let output = compile_and_exec(testdata_name, args)
-        .expect("failed to compile and execute the test source file");
-    assert_eq!(output.status.code(), Some(exit_code));
+    let output = compile_and_exec(testdata_name, args);
+    assert_eq!(
+        output.status.code(),
+        Some(exit_code),
+        "\ntestdata_name: {}\nargs: {:?}",
+        testdata_name,
+        args
+    );
 }

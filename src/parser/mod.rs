@@ -107,17 +107,17 @@ impl fmt::Display for ParseError {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AstNode {
-    Statements(Vec<Ast>),
-    StatementIf {
+    Block(Vec<Ast>),
+    StmtIf {
         cond: Box<Ast>,
         stmt: Box<Ast>,
         els: Option<Box<Ast>>,
     },
-    StatementWhile {
+    StmtWhile {
         cond: Box<Ast>,
         stmt: Box<Ast>,
     },
-    StatementFor {
+    StmtFor {
         init: Option<Box<Ast>>,
         cond: Option<Box<Ast>>,
         incr: Option<Box<Ast>>,
@@ -142,12 +142,12 @@ pub enum AstNode {
 pub type Ast = Annot<AstNode>;
 
 impl Ast {
-    fn statements(stmts: Vec<Ast>, loc: Loc) -> Self {
-        Self::new(AstNode::Statements(stmts), loc)
+    fn block(stmts: Vec<Ast>, loc: Loc) -> Self {
+        Self::new(AstNode::Block(stmts), loc)
     }
     fn stmt_if(cond: Ast, stmt: Ast, els: Option<Ast>, loc: Loc) -> Self {
         Self::new(
-            AstNode::StatementIf {
+            AstNode::StmtIf {
                 cond: Box::new(cond),
                 stmt: Box::new(stmt),
                 els: els.map(|els| Box::new(els)),
@@ -157,7 +157,7 @@ impl Ast {
     }
     fn stmt_while(cond: Ast, stmt: Ast, loc: Loc) -> Self {
         Self::new(
-            AstNode::StatementWhile {
+            AstNode::StmtWhile {
                 cond: Box::new(cond),
                 stmt: Box::new(stmt),
             },
@@ -172,7 +172,7 @@ impl Ast {
         loc: Loc,
     ) -> Self {
         Self::new(
-            AstNode::StatementFor {
+            AstNode::StmtFor {
                 init: init.map(|init| Box::new(init)),
                 cond: cond.map(|cond| Box::new(cond)),
                 incr: incr.map(|incr| Box::new(incr)),
@@ -303,12 +303,14 @@ where
 
 /// Parse tokens with following rules
 ///
-/// program     = stmt*
+/// program     = stmts
 /// stmt        = expr ";"
+///             | "{" stmts "}"
 ///             | stmt_if
 ///             | stmt_while
 ///             | stmt_for
 ///             | stmt_return
+/// stmts       = stmt*
 /// stmt_if     = "if" "(" expr ")" stmt ("else" stmt)?
 /// stmt_while  = "while" "(" expr ")" stmt
 /// stmt_for    = "for" "(" expr? ";" expr? ";" expr? ")" stmt
@@ -337,22 +339,14 @@ fn parse(tokens: Vec<Token>) -> Result<Ast> {
 
 /// Parse program
 ///
-/// program     = stmt*
+/// program     = stmts
 fn parse_program<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
     debug!("parse_program --");
 
-    let stmt = parse_stmt(tokens)?;
-    let mut loc = stmt.loc.clone();
-    let mut stmts = vec![stmt];
-    while let Some(_) = tokens.peek() {
-        let stmt = parse_stmt(tokens)?;
-        loc = loc.merge(&stmt.loc);
-        stmts.push(stmt);
-    }
-    let ret = Ok(Ast::statements(stmts, loc));
+    let ret = parse_stmts(tokens);
 
     debug!("parse_program: {:?}", ret);
     ret
@@ -361,6 +355,7 @@ where
 /// Parse stmt
 ///
 /// stmt        = expr ";"
+///             | "{" stmts "}"
 ///             | stmt_if
 ///             | stmt_while
 ///             | stmt_for
@@ -372,6 +367,12 @@ where
     debug!("parse_stmt --");
 
     let stmt = match tokens.peek().map(|token| &token.value) {
+        Some(TokenKind::LBrace) => {
+            consume(tokens, TokenKind::LBrace)?;
+            let stmts = parse_stmts(tokens)?;
+            consume(tokens, TokenKind::RBrace)?;
+            stmts
+        }
         Some(TokenKind::Keyword(Keyword::If)) => parse_stmt_if(tokens)?,
         Some(TokenKind::Keyword(Keyword::While)) => parse_stmt_while(tokens)?,
         Some(TokenKind::Keyword(Keyword::For)) => parse_stmt_for(tokens)?,
@@ -385,6 +386,31 @@ where
 
     let ret = Ok(stmt);
     debug!("parse_stmt: {:?}", ret);
+    ret
+}
+
+/// Parse stmts
+///
+/// stmts       = stmt*
+fn parse_stmts<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_stmts --");
+
+    let mut loc = Loc::NONE;
+    let mut stmts = vec![];
+    while let Some(token) = tokens.peek() {
+        if token.value == TokenKind::RBrace {
+            break;
+        }
+        let stmt = parse_stmt(tokens)?;
+        loc = loc.merge(&stmt.loc);
+        stmts.push(stmt);
+    }
+    let ret = Ok(Ast::block(stmts, loc));
+
+    debug!("parse_stmts: {:?}", ret);
     ret
 }
 

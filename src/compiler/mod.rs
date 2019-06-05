@@ -146,14 +146,14 @@ impl<'a> Compiler<'a> {
 
     fn compile_ast(&mut self, ast: &'a Ast) -> Result<()> {
         match ast.value {
-            AstNode::Statements(ref stmts) => self.compile_statements(stmts),
-            AstNode::StatementIf {
+            AstNode::Block(ref stmts) => self.compile_block(stmts),
+            AstNode::StmtIf {
                 ref cond,
                 ref stmt,
                 ref els,
             } => self.compile_stmt_if(cond, stmt, els),
-            AstNode::StatementWhile { ref cond, ref stmt } => self.compile_stmt_while(cond, stmt),
-            AstNode::StatementFor {
+            AstNode::StmtWhile { ref cond, ref stmt } => self.compile_stmt_while(cond, stmt),
+            AstNode::StmtFor {
                 ref init,
                 ref cond,
                 ref incr,
@@ -171,7 +171,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn compile_statements(&mut self, stmts: &'a Vec<Ast>) -> Result<()> {
+    fn compile_block(&mut self, stmts: &'a Vec<Ast>) -> Result<()> {
         use Opr::*;
         use Reg::*;
 
@@ -179,6 +179,7 @@ impl<'a> Compiler<'a> {
             self.compile_ast(ast)?;
             self.inss.push(Ins::POP(Direct(RAX)));
         }
+        self.inss.push(Ins::PUSH(Direct(RAX)));
 
         Ok(())
     }
