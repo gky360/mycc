@@ -6,6 +6,11 @@ language: rust
 services: docker
 sudo: required
 
+addons:
+  apt:
+    packages:
+      - libssl-dev
+
 env:
   global:
     - CRATE_NAME=mycc
@@ -18,6 +23,8 @@ matrix:
     # Testing other channels
     - env: TARGET=x86_64-unknown-linux-musl
       rust: nightly
+  allow_failures:
+    - rust: nightly
 
 before_install:
   - set -e
@@ -54,10 +61,23 @@ deploy:
   provider: releases
   skip_cleanup: true
 
+after_success: |
+  if [[ "$TRAVIS_RUST_VERSION" == stable ]]; then
+    # Uncomment the following line for coveralls.io
+    cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
+
+    # Uncomment the following two lines create and upload a report for codecov.io
+    # cargo tarpaulin --out Xml
+    # bash <(curl -s https://codecov.io/bash)
+  fi
+
 cache: cargo
-before_cache:
+before_cache: |
   # Travis can't cache files that are not readable by "others"
-  - chmod -R a+r $HOME/.cargo
+  chmod -R a+r $HOME/.cargo
+  if [[ "$TRAVIS_RUST_VERSION" == stable ]]; then
+    cargo install cargo-tarpaulin -f
+  fi
 
 branches:
   only:
