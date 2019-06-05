@@ -130,6 +130,10 @@ pub enum TokenKind {
     Asterisk,
     /// /
     Slash,
+    /// {
+    LBrace,
+    /// }
+    RBrace,
     /// (
     LParen,
     /// )
@@ -163,6 +167,8 @@ impl fmt::Display for TokenKind {
             Minus => write!(f, "-"),
             Asterisk => write!(f, "*"),
             Slash => write!(f, "/"),
+            LBrace => write!(f, "{{"),
+            RBrace => write!(f, "}}"),
             LParen => write!(f, "("),
             RParen => write!(f, ")"),
             Semicolon => write!(f, ";"),
@@ -200,6 +206,12 @@ impl Token {
     }
     pub fn slash(loc: Loc) -> Self {
         Self::new(TokenKind::Slash, loc)
+    }
+    pub fn lbrace(loc: Loc) -> Self {
+        Self::new(TokenKind::LBrace, loc)
+    }
+    pub fn rbrace(loc: Loc) -> Self {
+        Self::new(TokenKind::RBrace, loc)
     }
     pub fn lparen(loc: Loc) -> Self {
         Self::new(TokenKind::LParen, loc)
@@ -270,6 +282,8 @@ impl<'a> Lexer<'a> {
                 b'-' => lex_a_token!(self.lex_minus()),
                 b'*' => lex_a_token!(self.lex_asterisk()),
                 b'/' => lex_a_token!(self.lex_slash()),
+                b'{' => lex_a_token!(self.lex_lbrace()),
+                b'}' => lex_a_token!(self.lex_rbrace()),
                 b'(' => lex_a_token!(self.lex_lparen()),
                 b')' => lex_a_token!(self.lex_rparen()),
                 b';' => lex_a_token!(self.lex_semicolon()),
@@ -351,6 +365,14 @@ impl<'a> Lexer<'a> {
     fn lex_slash(&self) -> Result<Token> {
         self.consume_byte(b'/')
             .map(|(_, end)| Token::slash(Loc(end - 1, end)))
+    }
+    fn lex_lbrace(&self) -> Result<Token> {
+        self.consume_byte(b'{')
+            .map(|(_, end)| Token::lbrace(Loc(end - 1, end)))
+    }
+    fn lex_rbrace(&self) -> Result<Token> {
+        self.consume_byte(b'}')
+            .map(|(_, end)| Token::rbrace(Loc(end - 1, end)))
     }
     fn lex_lparen(&self) -> Result<Token> {
         self.consume_byte(b'(')
