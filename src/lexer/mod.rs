@@ -46,7 +46,15 @@ impl fmt::Display for LexError {
 pub struct Loc(pub usize, pub usize);
 
 impl Loc {
+    pub const NONE: Loc = Loc(0, 0);
+
     pub fn merge(&self, other: &Loc) -> Loc {
+        if self == &Loc::NONE {
+            return other.clone();
+        }
+        if other == &Loc::NONE {
+            return self.clone();
+        }
         Loc(min(self.0, other.0), max(self.1, other.1))
     }
 
