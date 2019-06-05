@@ -14,14 +14,14 @@ fn load_source(name: &str) -> std::io::Result<String> {
 fn assert_parse_error(name: &str) {
     let source = load_source(name).expect("failed to load test source file");
     match Ast::from_str(&source) {
-        Ok(_) => assert!(false),
-        Err(ParseError::Lex(_)) => assert!(false),
+        Ok(_) => assert!(false, "parser returned no error"),
+        Err(ParseError::Lex(_)) => assert!(false, "lexer returned error"),
         Err(_) => assert!(true),
     }
 }
 
 #[test]
-fn test_step_06_relational_operator() {
+fn step_06_relational_operator() {
     let names = vec![
         "step_06/invalid/missing_first_op.c",
         "step_06/invalid/missing_mid_op.c",
@@ -31,13 +31,13 @@ fn test_step_06_relational_operator() {
 }
 
 #[test]
-fn test_step_09_single_char_variable() {
+fn step_09_single_char_variable() {
     let names = vec!["step_09/invalid/syntax_err_no_semicolon.c"];
     names.iter().for_each(|name| assert_parse_error(name))
 }
 
 #[test]
-fn test_step_12_1_control_flow() {
+fn step_12_1_control_flow() {
     let names = vec![
         "step_12_1/invalid/if_assignment.c",
         "step_12_1/invalid/mismatched_nesting.c",
@@ -46,12 +46,18 @@ fn test_step_12_1_control_flow() {
 }
 
 #[test]
-fn test_step_12_2_control_flow() {
+fn step_12_2_control_flow() {
     let names = vec![
         "step_12_2/invalid/syntax_err_empty_clause.c",
         "step_12_2/invalid/syntax_err_paren_mismatch.c",
         "step_12_2/invalid/syntax_err_too_few_for_clauses.c",
         "step_12_2/invalid/syntax_err_too_many_for_clauses.c",
     ];
+    names.iter().for_each(|name| assert_parse_error(name))
+}
+
+#[test]
+fn step_13_compound_statement() {
+    let names = vec!["step_13/invalid/compound_statement_01.c"];
     names.iter().for_each(|name| assert_parse_error(name))
 }
