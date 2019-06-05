@@ -1,11 +1,13 @@
 #[macro_use]
 extern crate log;
 
+#[cfg_attr(tarpaulin, skip)]
 mod helpers;
 
 use helpers::{assert_exit_status, run_test};
 
 #[test]
+#[cfg_attr(tarpaulin, skip)]
 fn step_01_single_literal() {
     run_test(|| {
         assert_exit_status("step_01/single_literal.c", &[], 123);
@@ -13,6 +15,7 @@ fn step_01_single_literal() {
 }
 
 #[test]
+#[cfg_attr(tarpaulin, skip)]
 fn step_02_single_literal() {
     run_test(|| {
         assert_exit_status("step_02/add_sub.c", &[], 21);
@@ -20,6 +23,7 @@ fn step_02_single_literal() {
 }
 
 #[test]
+#[cfg_attr(tarpaulin, skip)]
 fn step_03_single_literal() {
     run_test(|| {
         assert_exit_status("step_03/with_whitespace.c", &[], 41);
@@ -27,6 +31,7 @@ fn step_03_single_literal() {
 }
 
 #[test]
+#[cfg_attr(tarpaulin, skip)]
 fn step_04_basic_arithmetics() {
     run_test(|| {
         assert_exit_status("step_04/basic_arithmetics_01.c", &[], 47);
@@ -36,6 +41,7 @@ fn step_04_basic_arithmetics() {
 }
 
 #[test]
+#[cfg_attr(tarpaulin, skip)]
 fn step_05_unary_operator() {
     run_test(|| {
         assert_exit_status("step_05/unary_operator_01.c", &[], 256 - 3);
@@ -45,6 +51,7 @@ fn step_05_unary_operator() {
 }
 
 #[test]
+#[cfg_attr(tarpaulin, skip)]
 fn step_06_relational_operator() {
     run_test(|| {
         assert_exit_status("step_06/valid/relational_operator_01.c", &[], 1);
@@ -56,6 +63,7 @@ fn step_06_relational_operator() {
 }
 
 #[test]
+#[cfg_attr(tarpaulin, skip)]
 fn step_09_single_char_varibale() {
     run_test(|| {
         assert_exit_status("step_09/valid/assign_val.c", &[], 0);
@@ -70,6 +78,7 @@ fn step_09_single_char_varibale() {
 }
 
 #[test]
+#[cfg_attr(tarpaulin, skip)]
 fn step_10_return() {
     run_test(|| {
         assert_exit_status("step_10/valid/return_01.c", &[], 14);
@@ -78,6 +87,7 @@ fn step_10_return() {
 }
 
 #[test]
+#[cfg_attr(tarpaulin, skip)]
 fn step_11_multi_chars_variable() {
     run_test(|| {
         assert_exit_status("step_11/valid/multi_chars_variable_01.c", &[], 6);
@@ -88,6 +98,7 @@ fn step_11_multi_chars_variable() {
 }
 
 #[test]
+#[cfg_attr(tarpaulin, skip)]
 fn step_12_1_control_flow() {
     run_test(|| {
         assert_exit_status("step_12_1/valid/else.c", &[], 2);
@@ -103,6 +114,7 @@ fn step_12_1_control_flow() {
 }
 
 #[test]
+#[cfg_attr(tarpaulin, skip)]
 fn step_12_2_control_flow() {
     run_test(|| {
         assert_exit_status("step_12_2/valid/for_decl.c", &[], 3);
@@ -113,6 +125,7 @@ fn step_12_2_control_flow() {
 }
 
 #[test]
+#[cfg_attr(tarpaulin, skip)]
 fn step_13_compound_statement() {
     run_test(|| {
         assert_exit_status("step_13/valid/return_in_while.c", &[], 2);

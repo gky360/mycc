@@ -4,6 +4,7 @@ extern crate log;
 use std::process;
 use structopt::StructOpt;
 
+#[cfg_attr(tarpaulin, skip)]
 fn main() {
     env_logger::init();
 

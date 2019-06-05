@@ -6,6 +6,7 @@ use std::str::FromStr;
 use super::lexer::{Annot, Keyword, LexError, Lexer, Loc, Token, TokenKind};
 
 #[cfg(test)]
+#[cfg_attr(tarpaulin, skip)]
 mod tests;
 
 pub type Result<T> = std::result::Result<T, ParseError>;
