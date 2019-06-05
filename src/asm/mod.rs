@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, ops};
 use strum_macros::Display;
 
 #[cfg(test)]
@@ -8,15 +8,15 @@ mod tests;
 static INDENT: &str = "    ";
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Assembly(Vec<Ent>);
+pub struct Assembly<'a>(Vec<Ent<'a>>);
 
-impl Assembly {
-    pub fn new(entries: Vec<Ent>) -> Assembly {
+impl<'a> Assembly<'a> {
+    pub fn new(entries: Vec<Ent<'a>>) -> Assembly {
         Assembly(entries)
     }
 }
 
-impl fmt::Display for Assembly {
+impl<'a> fmt::Display for Assembly<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for ent in self.0.iter() {
             writeln!(f, "{}", ent)?;
@@ -26,18 +26,18 @@ impl fmt::Display for Assembly {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum Ent {
+pub enum Ent<'a> {
     /// e.g. `.intel_syntax noprefix`
-    Dot(&'static str, &'static str),
+    Dot(&'a str, &'a str),
     /// e.g. `main:`
-    Fun(Function),
+    Fun(Function<'a>),
     /// empty line
     Empty,
     Raw(String),
 }
 
-impl Ent {
-    pub fn dot(name: &'static str, content: &'static str) -> Ent {
+impl<'a> Ent<'a> {
+    pub fn dot(name: &'a str, content: &'a str) -> Ent<'a> {
         Ent::Dot(name, content)
     }
 
@@ -46,7 +46,7 @@ impl Ent {
     }
 }
 
-impl fmt::Display for Ent {
+impl<'a> fmt::Display for Ent<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Ent::*;
         match self {
@@ -59,13 +59,13 @@ impl fmt::Display for Ent {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Function {
+pub struct Function<'a> {
     name: String,
-    instructions: Vec<Ins>,
+    instructions: &'a Instructions,
 }
 
-impl Function {
-    pub fn new(name: &str, instructions: Vec<Ins>) -> Self {
+impl<'a> Function<'a> {
+    pub fn new(name: &str, instructions: &'a Instructions) -> Self {
         Function {
             name: String::from(name),
             instructions,
@@ -73,34 +73,75 @@ impl Function {
     }
 }
 
-impl fmt::Display for Function {
+impl<'a> fmt::Display for Function<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "{}:", self.name)?;
-        for ins in self.instructions.iter() {
+        write!(f, "{}", self.instructions)
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct Instructions {
+    pub data: Vec<Ins>,
+    pub stackpos: i32,
+}
+
+impl Instructions {
+    pub fn new(instructions: Vec<Ins>) -> Self {
+        Instructions {
+            data: instructions,
+            stackpos: 0,
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.data.clear();
+        self.stackpos = 0;
+    }
+
+    pub fn push(&mut self, ins: Ins) {
+        match ins {
+            Ins::PUSH(_) => {
+                self.stackpos += 8;
+            }
+            Ins::POP(_) => {
+                // TODO: check if stackops >= 0
+                // assert!(self.stackpos >= 8, "tried to pop empty stack");
+                self.stackpos -= 8;
+            }
+            _ => {}
+        }
+        self.data.push(ins);
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+}
+
+impl ops::Index<usize> for Instructions {
+    type Output = Ins;
+
+    fn index(&self, idx: usize) -> &Self::Output {
+        &self.data[idx]
+    }
+}
+
+impl ops::IndexMut<usize> for Instructions {
+    fn index_mut<'a>(&'a mut self, index: usize) -> &'a mut Self::Output {
+        &mut self.data[index]
+    }
+}
+
+impl fmt::Display for Instructions {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for ins in self.data.iter() {
             match ins {
                 Ins::DefLabel(label) => writeln!(f, "{}:", label)?,
                 ins => writeln!(f, "{}{}", INDENT, ins)?,
             }
         }
         Ok(())
-    }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct Label {
-    name: &'static str,
-    id: usize,
-}
-
-impl Label {
-    pub fn new(name: &'static str, id: usize) -> Self {
-        Label { name, id }
-    }
-}
-
-impl fmt::Display for Label {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, ".L{}_{:>08x}", self.name, self.id)
     }
 }
 
@@ -161,6 +202,24 @@ impl fmt::Display for Ins {
             SUB(opr1, opr2) => write!(f, "sub {}, {}", opr1, opr2),
             RET => write!(f, "ret"),
         }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct Label {
+    name: &'static str,
+    id: usize,
+}
+
+impl Label {
+    pub fn new(name: &'static str, id: usize) -> Self {
+        Label { name, id }
+    }
+}
+
+impl fmt::Display for Label {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, ".L{}_{:>08x}", self.name, self.id)
     }
 }
 

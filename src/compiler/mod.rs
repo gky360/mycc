@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::asm::{Assembly, Ent, Function, Ins, Label, Opr, Reg};
+use crate::asm::{Assembly, Ent, Function, Ins, Instructions, Label, Opr, Reg};
 use crate::lexer::{Annot, Loc};
 use crate::parser::{Ast, AstNode, BinOp, BinOpKind, UniOp, UniOpKind};
 
@@ -67,7 +67,7 @@ impl fmt::Display for CompileError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Compiler<'a> {
-    inss: Vec<Ins>,
+    inss: Instructions,
     var_offset: HashMap<&'a str, u64>,
     next_label_id: usize,
 }
@@ -75,7 +75,7 @@ pub struct Compiler<'a> {
 impl<'a> Compiler<'a> {
     pub fn new() -> Compiler<'a> {
         Compiler {
-            inss: Vec::new(),
+            inss: Instructions::new(Vec::new()),
             var_offset: HashMap::new(),
             next_label_id: 0,
         }
@@ -104,15 +104,17 @@ impl<'a> Compiler<'a> {
         let ins_id_for_reserve_local_vars = self.inss.len() - 1;
 
         self.compile_ast(ast)?;
+        let local_area = 8 * self.var_offset.len();
         self.inss[ins_id_for_reserve_local_vars] =
-            Ins::SUB(Direct(RSP), Literal(8 * self.var_offset.len() as u64));
+            Ins::SUB(Direct(RSP), Literal(local_area as u64));
+        self.inss.stackpos += local_area as i32;
 
         // epilogue
         self.inss.push(Ins::MOV(Direct(RSP), Direct(RBP)));
         self.inss.push(Ins::POP(Direct(RBP)));
         self.inss.push(Ins::RET);
 
-        let fn_main = Function::new("main", self.inss.clone());
+        let fn_main = Function::new("main", &self.inss);
         Ok(Assembly::new(vec![
             Ent::dot("intel_syntax", "noprefix"),
             Ent::dot("global", "main"),
