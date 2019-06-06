@@ -68,13 +68,26 @@ fn compile_and_exec(testdata_name: &str, args: &[&OsStr]) -> Output {
     exec_output
 }
 
-pub fn assert_exit_status(testdata_name: &str, args: &[&OsStr], exit_code: i32) {
+pub fn assert_exit_status(testdata_name: &str, args: &[&OsStr], status: i32) {
     let output = compile_and_exec(testdata_name, args);
     assert_eq!(
         output.status.code(),
-        Some(exit_code),
+        Some(status),
         "\ntestdata_name: {}\nargs: {:?}",
         testdata_name,
         args
     );
+}
+
+pub fn assert_output(
+    testdata_name: &str,
+    args: &[&OsStr],
+    status: i32,
+    stdout: &str,
+    stderr: &str,
+) {
+    let output = compile_and_exec(testdata_name, args);
+    assert!(output.status.code() == Some(status));
+    assert!(output.stdout == stdout.as_bytes());
+    assert!(output.stderr == stderr.as_bytes());
 }
