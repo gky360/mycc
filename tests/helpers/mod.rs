@@ -28,22 +28,22 @@ fn testdata_path(name: &str) -> PathBuf {
     PathBuf::from("testdata").join(name)
 }
 
-fn compile(asm_path: &Path, exec_path: &Path) -> io::Result<Output> {
-    Command::new("gcc")
-        .args(&[
-            "-fstack-protector",
-            "-o",
-            exec_path.to_str().unwrap(),
-            asm_path.to_str().unwrap(),
-        ])
-        .output()
+fn compile(asm_path: &Path, exec_path: &Path, compile_args: &[&OsStr]) -> io::Result<Output> {
+    let mut args = Vec::new();
+    args.push(OsStr::new("-fstack-protector"));
+    args.push(OsStr::new("-o"));
+    args.push(OsStr::new(exec_path.to_str().unwrap()));
+    args.push(OsStr::new(asm_path.to_str().unwrap()));
+    args.extend_from_slice(compile_args);
+
+    Command::new("gcc").args(args).output()
 }
 
-fn exec(exec_path: &Path, args: &[&OsStr]) -> io::Result<Output> {
-    Command::new(exec_path).args(args).output()
+fn exec(exec_path: &Path, exec_args: &[&OsStr]) -> io::Result<Output> {
+    Command::new(exec_path).args(exec_args).output()
 }
 
-fn compile_and_exec(testdata_name: &str, args: &[&OsStr]) -> Output {
+fn compile_and_exec(testdata_name: &str, compile_args: &[&OsStr], exec_args: &[&OsStr]) -> Output {
     let tmp_dir = TempDir::new("mycc").expect("failed to create temp dir");
     let exec_path = tmp_dir.path().join("a.out");
     let opt = {
@@ -56,38 +56,54 @@ fn compile_and_exec(testdata_name: &str, args: &[&OsStr]) -> Output {
 
     mycc::run(&opt).expect(&format!("failed to run mycc for {}", testdata_name));
 
-    let compile_output = compile(&opt.output, &exec_path).expect("failed to compile");
+    let compile_output = compile(&opt.output, &exec_path, compile_args).expect("failed to compile");
     debug!("compile_output: {:?}", compile_output);
     if !compile_output.status.success() {
+        eprintln!(
+            "{}",
+            String::from_utf8(compile_output.stderr).expect("failed to output gcc error")
+        );
         panic!("gcc exited with failure");
     }
 
-    let exec_output = exec(&exec_path, &args).expect("failed to execute");
+    let exec_output = exec(&exec_path, &exec_args).expect("failed to execute");
     debug!("exec_output: {:?}", exec_output);
 
     exec_output
 }
 
-pub fn assert_exit_status(testdata_name: &str, args: &[&OsStr], status: i32) {
-    let output = compile_and_exec(testdata_name, args);
+pub fn assert_exit_status(
+    testdata_name: &str,
+    compile_args: &[&OsStr],
+    exec_args: &[&OsStr],
+    status: i32,
+) {
+    let output = compile_and_exec(testdata_name, compile_args, exec_args);
     assert_eq!(
         output.status.code(),
         Some(status),
         "\ntestdata_name: {}\nargs: {:?}",
         testdata_name,
-        args
+        exec_args
     );
 }
 
 pub fn assert_output(
     testdata_name: &str,
-    args: &[&OsStr],
+    compile_args: &[&OsStr],
+    exec_args: &[&OsStr],
     status: i32,
     stdout: &str,
     stderr: &str,
 ) {
-    let output = compile_and_exec(testdata_name, args);
-    assert!(output.status.code() == Some(status));
-    assert!(output.stdout == stdout.as_bytes());
-    assert!(output.stderr == stderr.as_bytes());
+    let output = compile_and_exec(testdata_name, compile_args, exec_args);
+    assert_eq!(output.status.code(), Some(status));
+    assert_eq!(
+        &String::from_utf8(output.stdout).expect("failed to convert stdout to string"),
+        stdout
+    );
+    assert_eq!(
+        &String::from_utf8(output.stderr).expect("failed to convert stderr to string"),
+        stderr
+    );
 }
