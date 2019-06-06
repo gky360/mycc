@@ -171,7 +171,7 @@ impl<'a> Compiler<'a> {
             } => self.compile_binop(op, l, r),
             AstNode::UniOp { ref op, ref e } => self.compile_uniop(op, e),
             AstNode::Ret { ref e } => self.compile_ret(e),
-            AstNode::FuncCall { .. } => Err(CompileError::not_implemented(ast.loc.clone())),
+            AstNode::FuncCall { ref name } => self.compile_func_call(name),
         }
     }
 
@@ -391,6 +391,29 @@ impl<'a> Compiler<'a> {
         self.inss.push(Ins::POP(Direct(RBP)));
         self.inss.push(Ins::RET);
 
+        Ok(())
+    }
+
+    fn compile_func_call(&mut self, name: &str) -> Result<()> {
+        use Opr::*;
+        use Reg::*;
+
+        let org_stackpos = self.inss.stackpos;
+
+        let need_padding = self.inss.stackpos % 16 != 0;
+        if need_padding {
+            self.inss.push(Ins::SUB(Direct(RSP), Literal(8)));
+            self.inss.stackpos += 8;
+        }
+
+        self.inss.push(Ins::CALL(String::from(name)));
+
+        if need_padding {
+            self.inss.push(Ins::ADD(Direct(RSP), Literal(8)));
+            self.inss.stackpos -= 8;
+        }
+
+        assert_eq!(self.inss.stackpos, org_stackpos);
         Ok(())
     }
 }
