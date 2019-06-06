@@ -138,6 +138,9 @@ pub enum AstNode {
     Ret {
         e: Box<Ast>,
     },
+    FuncCall {
+        name: String,
+    },
 }
 
 pub type Ast = Annot<AstNode>;
@@ -204,6 +207,9 @@ impl Ast {
     }
     fn ret(e: Ast, loc: Loc) -> Self {
         Self::new(AstNode::Ret { e: Box::new(e) }, loc)
+    }
+    fn funcall(name: String, loc: Loc) -> Self {
+        Self::new(AstNode::FuncCall { name }, loc)
     }
 }
 
@@ -323,7 +329,9 @@ where
 /// add         = mul ("+" mul | "-" mul)*
 /// mul         = unary ("*" unary | "/" unary)*
 /// unary       = ("+" | "-")? term
-/// term        = num | ident | "(" expr ")"
+/// term        = num
+///             | ident ("(" ")")?
+///             | "(" expr ")"
 fn parse(tokens: Vec<Token>) -> Result<Ast> {
     debug!("parse --");
 
@@ -710,7 +718,9 @@ where
 
 /// Parse term
 ///
-/// term        = num | ident | "(" expr ")"
+/// term        = num
+///             | ident ("(" ")")?
+///             | "(" expr ")"
 fn parse_term<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -720,7 +730,14 @@ where
     let token = tokens.next().ok_or(ParseError::Eof)?;
     let ret = match token.value {
         TokenKind::Number(n) => Ok(Ast::num(n, token.loc)),
-        TokenKind::Ident(name) => Ok(Ast::ident(name, token.loc)),
+        TokenKind::Ident(name) => match tokens.peek().map(|token| &token.value) {
+            Some(TokenKind::LParen) => {
+                consume(tokens, TokenKind::LParen)?;
+                let loc = consume(tokens, TokenKind::RParen)?;
+                Ok(Ast::funcall(name, token.loc.merge(&loc)))
+            }
+            _ => Ok(Ast::ident(name, token.loc)),
+        },
         TokenKind::LParen => {
             let e = parse_expr(tokens)?;
             match tokens.next() {
