@@ -63,7 +63,19 @@ fn step_13_compound_statement() {
 }
 
 #[test]
-fn step_13_call_func() {
+fn step_14_call_func() {
     let names = vec!["step_14/invalid/call_func_01.c"];
+    names.iter().for_each(|name| assert_parse_error(name))
+}
+
+#[test]
+fn step_15_declare_func() {
+    let names = vec![
+        "step_15/invalid/bad_arg.c",
+        "step_15/invalid/declaration_mismatch.c",
+        "step_15/invalid/declaration_mismatch_2.c",
+        "step_15/invalid/redefine_function.c",
+        "step_15/invalid/too_many_args.c",
+    ];
     names.iter().for_each(|name| assert_parse_error(name))
 }
