@@ -109,7 +109,7 @@ pub enum AstNode {
     Func {
         name: String,
         args: Vec<String>,
-        body: Option<Box<Ast>>,
+        body: Box<Ast>,
     },
     Block(Vec<Ast>),
     StmtIf {
@@ -153,12 +153,12 @@ impl Ast {
     fn program(funcs: Vec<Ast>, loc: Loc) -> Self {
         Self::new(AstNode::Program { funcs }, loc)
     }
-    fn func(name: String, args: Vec<String>, body: Option<Ast>, loc: Loc) -> Self {
+    fn func(name: String, args: Vec<String>, body: Ast, loc: Loc) -> Self {
         Self::new(
             AstNode::Func {
                 name,
                 args,
-                body: body.map(|body| Box::new(body)),
+                body: Box::new(body),
             },
             loc,
         )
@@ -395,8 +395,10 @@ where
     let mut funcs = vec![];
     while let Some(_) = tokens.peek() {
         let func = parse_func(tokens)?;
-        loc = loc.merge(&func.loc);
-        funcs.push(func);
+        if let Some(func) = func {
+            loc = loc.merge(&func.loc);
+            funcs.push(func);
+        }
     }
     let ret = Ok(Ast::program(funcs, loc));
 
@@ -407,7 +409,7 @@ where
 /// Parse func
 ///
 /// func        = ident "(" (ident ("," ident)*)? ")" (";" | "{" stmts "}")
-fn parse_func<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+fn parse_func<T>(tokens: &mut Peekable<T>) -> Result<Option<Ast>>
 where
     T: Iterator<Item = Token>,
 {
@@ -430,17 +432,16 @@ where
     consume(tokens, TokenKind::RParen)?;
 
     let ret = match tokens.peek().map(|token| &token.value) {
-        Some(TokenKind::Semicolon) => Ok(Ast::func(
-            name,
-            args,
-            None,
-            loc.merge(&tokens.next().unwrap().loc),
-        )),
+        Some(TokenKind::Semicolon) => {
+            tokens.next().unwrap();
+            // TODO: do not skip function declaration
+            Ok(None)
+        }
         _ => {
             consume(tokens, TokenKind::LBrace)?;
             let stmts = parse_stmts(tokens)?;
             let loc = loc.merge(&consume(tokens, TokenKind::RBrace)?);
-            Ok(Ast::func(name, args, Some(stmts), loc))
+            Ok(Some(Ast::func(name, args, stmts, loc)))
         }
     };
 
