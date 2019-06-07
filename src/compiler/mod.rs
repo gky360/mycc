@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::asm::{Assembly, Ent, Function, Ins, Label, Opr, Reg};
+use crate::asm::{Assembly, Ent, Function, Ins, Instructions, Label, Opr, Reg};
 use crate::lexer::{Annot, Loc};
 use crate::parser::{Ast, AstNode, BinOp, BinOpKind, UniOp, UniOpKind};
 
@@ -67,15 +67,17 @@ impl fmt::Display for CompileError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Compiler<'a> {
-    inss: Vec<Ins>,
+    inss: Instructions,
     var_offset: HashMap<&'a str, u64>,
     next_label_id: usize,
 }
 
 impl<'a> Compiler<'a> {
+    const ARG_REGS: &'a [Reg] = &[Reg::RDI, Reg::RSI, Reg::RDX, Reg::RCX, Reg::R8, Reg::R9];
+
     pub fn new() -> Compiler<'a> {
         Compiler {
-            inss: Vec::new(),
+            inss: Instructions::new(Vec::new()),
             var_offset: HashMap::new(),
             next_label_id: 0,
         }
@@ -104,15 +106,17 @@ impl<'a> Compiler<'a> {
         let ins_id_for_reserve_local_vars = self.inss.len() - 1;
 
         self.compile_ast(ast)?;
+        let local_area = 8 * self.var_offset.len();
         self.inss[ins_id_for_reserve_local_vars] =
-            Ins::SUB(Direct(RSP), Literal(8 * self.var_offset.len() as u64));
+            Ins::SUB(Direct(RSP), Literal(local_area as u64));
+        self.inss.stackpos += local_area as i32;
 
         // epilogue
         self.inss.push(Ins::MOV(Direct(RSP), Direct(RBP)));
         self.inss.push(Ins::POP(Direct(RBP)));
         self.inss.push(Ins::RET);
 
-        let fn_main = Function::new("main", self.inss.clone());
+        let fn_main = Function::new("main", &self.inss);
         Ok(Assembly::new(vec![
             Ent::dot("intel_syntax", "noprefix"),
             Ent::dot("global", "main"),
@@ -169,6 +173,7 @@ impl<'a> Compiler<'a> {
             } => self.compile_binop(op, l, r),
             AstNode::UniOp { ref op, ref e } => self.compile_uniop(op, e),
             AstNode::Ret { ref e } => self.compile_ret(e),
+            AstNode::FuncCall { ref name, ref args } => self.compile_func_call(name, args),
         }
     }
 
@@ -312,28 +317,28 @@ impl<'a> Compiler<'a> {
             self.compile_lval(l)?;
             self.compile_ast(r)?;
 
-            self.inss.push(Ins::POP(Direct(RDI)));
+            self.inss.push(Ins::POP(Direct(R10)));
             self.inss.push(Ins::POP(Direct(RAX)));
-            self.inss.push(Ins::MOV(Indirect(RAX), Direct(RDI)));
-            self.inss.push(Ins::PUSH(Direct(RDI)));
+            self.inss.push(Ins::MOV(Indirect(RAX), Direct(R10)));
+            self.inss.push(Ins::PUSH(Direct(R10)));
             return Ok(());
         }
 
         self.compile_ast(l)?;
         self.compile_ast(r)?;
-        self.inss.push(Ins::POP(Direct(RDI)));
+        self.inss.push(Ins::POP(Direct(R10)));
         self.inss.push(Ins::POP(Direct(RAX)));
         match binop.value {
             BinOpKind::Assign => unreachable!(),
-            BinOpKind::Add => self.inss.push(Ins::ADD(Direct(RAX), Direct(RDI))),
-            BinOpKind::Sub => self.inss.push(Ins::SUB(Direct(RAX), Direct(RDI))),
-            BinOpKind::Mul => self.inss.push(Ins::IMUL(Direct(RDI))),
+            BinOpKind::Add => self.inss.push(Ins::ADD(Direct(RAX), Direct(R10))),
+            BinOpKind::Sub => self.inss.push(Ins::SUB(Direct(RAX), Direct(R10))),
+            BinOpKind::Mul => self.inss.push(Ins::IMUL(Direct(R10))),
             BinOpKind::Div => {
                 self.inss.push(Ins::CQO);
-                self.inss.push(Ins::IDIV(Direct(RDI)));
+                self.inss.push(Ins::IDIV(Direct(R10)));
             }
             BinOpKind::Eq | BinOpKind::Ne | BinOpKind::Lt | BinOpKind::Le => {
-                self.inss.push(Ins::CMP(Direct(RAX), Direct(RDI)));
+                self.inss.push(Ins::CMP(Direct(RAX), Direct(R10)));
                 match binop.value {
                     BinOpKind::Eq => self.inss.push(Ins::SETE(Direct(AL))),
                     BinOpKind::Ne => self.inss.push(Ins::SETNE(Direct(AL))),
@@ -344,7 +349,7 @@ impl<'a> Compiler<'a> {
                 self.inss.push(Ins::MOVZB(Direct(RAX), Direct(AL)));
             }
             BinOpKind::Gt | BinOpKind::Ge => {
-                self.inss.push(Ins::CMP(Direct(RDI), Direct(RAX)));
+                self.inss.push(Ins::CMP(Direct(R10), Direct(RAX)));
                 match binop.value {
                     BinOpKind::Gt => self.inss.push(Ins::SETL(Direct(AL))),
                     BinOpKind::Ge => self.inss.push(Ins::SETLE(Direct(AL))),
@@ -365,11 +370,11 @@ impl<'a> Compiler<'a> {
             UniOpKind::Positive => {}
             UniOpKind::Negative => {
                 // consider -x as 0 - x
-                self.inss.push(Ins::POP(Opr::Direct(Reg::RDI)));
+                self.inss.push(Ins::POP(Opr::Direct(Reg::R10)));
                 self.inss
                     .push(Ins::MOV(Opr::Direct(Reg::RAX), Opr::Literal(0)));
                 self.inss
-                    .push(Ins::SUB(Opr::Direct(Reg::RAX), Opr::Direct(Reg::RDI)));
+                    .push(Ins::SUB(Opr::Direct(Reg::RAX), Opr::Direct(Reg::R10)));
                 self.inss.push(Ins::PUSH(Opr::Direct(Reg::RAX)));
             }
         };
@@ -388,6 +393,34 @@ impl<'a> Compiler<'a> {
         self.inss.push(Ins::POP(Direct(RBP)));
         self.inss.push(Ins::RET);
 
+        Ok(())
+    }
+
+    fn compile_func_call(&mut self, name: &str, args: &'a Vec<Ast>) -> Result<()> {
+        use Opr::*;
+        use Reg::*;
+
+        let org_stackpos = self.inss.stackpos;
+
+        for (i, arg) in args.iter().enumerate() {
+            self.compile_ast(arg)?;
+            self.inss.push(Ins::POP(Direct(Self::ARG_REGS[i])));
+        }
+
+        let need_padding = self.inss.stackpos % 16 != 0;
+        if need_padding {
+            self.inss.push(Ins::SUB(Direct(RSP), Literal(8)));
+            self.inss.stackpos += 8;
+        }
+
+        self.inss.push(Ins::CALL(String::from(name)));
+
+        if need_padding {
+            self.inss.push(Ins::ADD(Direct(RSP), Literal(8)));
+            self.inss.stackpos -= 8;
+        }
+
+        assert_eq!(self.inss.stackpos, org_stackpos);
         Ok(())
     }
 }

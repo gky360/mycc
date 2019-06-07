@@ -150,6 +150,8 @@ pub enum TokenKind {
     LParen,
     /// )
     RParen,
+    /// ,
+    Comma,
     /// ;
     Semicolon,
     /// =
@@ -183,6 +185,7 @@ impl fmt::Display for TokenKind {
             RBrace => write!(f, "}}"),
             LParen => write!(f, "("),
             RParen => write!(f, ")"),
+            Comma => write!(f, ","),
             Semicolon => write!(f, ";"),
             Assign => write!(f, "="),
             Eq => write!(f, "=="),
@@ -230,6 +233,9 @@ impl Token {
     }
     pub fn rparen(loc: Loc) -> Self {
         Self::new(TokenKind::RParen, loc)
+    }
+    pub fn comma(loc: Loc) -> Self {
+        Self::new(TokenKind::Comma, loc)
     }
     pub fn semicolon(loc: Loc) -> Self {
         Self::new(TokenKind::Semicolon, loc)
@@ -298,6 +304,7 @@ impl<'a> Lexer<'a> {
                 b'}' => lex_a_token!(self.lex_rbrace()),
                 b'(' => lex_a_token!(self.lex_lparen()),
                 b')' => lex_a_token!(self.lex_rparen()),
+                b',' => lex_a_token!(self.lex_comma()),
                 b';' => lex_a_token!(self.lex_semicolon()),
                 b'=' => lex_a_token!(self.lex_assign_or_eq()),
                 b'!' => lex_a_token!(self.lex_ne()),
@@ -393,6 +400,10 @@ impl<'a> Lexer<'a> {
     fn lex_rparen(&self) -> Result<Token> {
         self.consume_byte(b')')
             .map(|(_, end)| Token::rparen(Loc(end - 1, end)))
+    }
+    fn lex_comma(&self) -> Result<Token> {
+        self.consume_byte(b',')
+            .map(|(_, end)| Token::comma(Loc(end - 1, end)))
     }
     fn lex_semicolon(&self) -> Result<Token> {
         self.consume_byte(b';')
