@@ -165,7 +165,7 @@ fn step_14_call_func() {
             &[OsStr::new("testdata/step_14/foo_x_y.o")],
             &[],
             0,
-            "OK: 3\n",
+            "OK: 3, 12\n",
             "",
         );
     });
