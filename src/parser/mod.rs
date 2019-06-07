@@ -79,12 +79,12 @@ impl fmt::Display for ParseError {
                 match len {
                     1 => write!(
                         f,
-                        "{}: expected '{}' before '{}' token",
+                        "{}: expected '{}' before '{}'",
                         token.loc, expected[0], token.value
                     ),
                     2 => write!(
                         f,
-                        "{}: expected '{}' or '{}' before '{}' token",
+                        "{}: expected '{}' or '{}' before '{}'",
                         token.loc, expected[0], expected[1], token.value
                     ),
                     _ => {
@@ -92,12 +92,7 @@ impl fmt::Display for ParseError {
                         for kind in &expected[..len - 1] {
                             write!(f, "'{}', ", kind)?;
                         }
-                        write!(
-                            f,
-                            "or '{}' before '{}' token",
-                            expected[len - 1],
-                            token.value
-                        )
+                        write!(f, "or '{}' before '{}'", expected[len - 1], token.value)
                     }
                 }
             }
@@ -140,6 +135,7 @@ pub enum AstNode {
     },
     FuncCall {
         name: String,
+        args: Vec<Ast>,
     },
 }
 
@@ -208,8 +204,8 @@ impl Ast {
     fn ret(e: Ast, loc: Loc) -> Self {
         Self::new(AstNode::Ret { e: Box::new(e) }, loc)
     }
-    fn funcall(name: String, loc: Loc) -> Self {
-        Self::new(AstNode::FuncCall { name }, loc)
+    fn funcall(name: String, args: Vec<Ast>, loc: Loc) -> Self {
+        Self::new(AstNode::FuncCall { name, args }, loc)
     }
 }
 
@@ -330,7 +326,8 @@ where
 /// mul         = unary ("*" unary | "/" unary)*
 /// unary       = ("+" | "-")? term
 /// term        = num
-///             | ident ("(" ")")?
+///             | ident
+///             | ident "(" (expr ("," expr)?)? ")"
 ///             | "(" expr ")"
 fn parse(tokens: Vec<Token>) -> Result<Ast> {
     debug!("parse --");
@@ -719,7 +716,8 @@ where
 /// Parse term
 ///
 /// term        = num
-///             | ident ("(" ")")?
+///             | ident
+///             | ident "(" (expr ("," expr)?)? ")"
 ///             | "(" expr ")"
 fn parse_term<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
@@ -733,8 +731,18 @@ where
         TokenKind::Ident(name) => match tokens.peek().map(|token| &token.value) {
             Some(TokenKind::LParen) => {
                 consume(tokens, TokenKind::LParen)?;
+                let mut args = Vec::new();
+                loop {
+                    if let Some(TokenKind::RParen) = tokens.peek().map(|token| &token.value) {
+                        break;
+                    }
+                    if args.len() > 0 {
+                        consume(tokens, TokenKind::Comma)?;
+                    }
+                    args.push(parse_expr(tokens)?);
+                }
                 let loc = consume(tokens, TokenKind::RParen)?;
-                Ok(Ast::funcall(name, token.loc.merge(&loc)))
+                Ok(Ast::funcall(name, args, token.loc.merge(&loc)))
             }
             _ => Ok(Ast::ident(name, token.loc)),
         },

@@ -171,7 +171,7 @@ impl<'a> Compiler<'a> {
             } => self.compile_binop(op, l, r),
             AstNode::UniOp { ref op, ref e } => self.compile_uniop(op, e),
             AstNode::Ret { ref e } => self.compile_ret(e),
-            AstNode::FuncCall { ref name } => self.compile_func_call(name),
+            AstNode::FuncCall { ref name, .. } => self.compile_func_call(name),
         }
     }
 
