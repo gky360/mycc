@@ -3,6 +3,7 @@ extern crate log;
 
 use std::ffi::OsStr;
 use std::process::Command;
+use tempdir::TempDir;
 
 use helpers::{assert_exit_status, assert_output, run_test};
 
@@ -139,29 +140,37 @@ fn step_13_compound_statement() {
 #[test]
 #[cfg_attr(tarpaulin, skip)]
 fn step_14_call_func() {
-    for name in &["foo", "foo_x_y"] {
-        let output = Command::new("gcc")
-            .args(&[
-                "-o",
-                &format!("testdata/step_14/{}.o", name),
-                "-c",
-                &format!("testdata/step_14/{}.c", name),
-            ])
-            .output()
-            .expect("failed to compile func declaration");
-        if !output.status.success() {
-            eprintln!(
-                "{}",
-                String::from_utf8(output.stderr).expect("failed to output gcc error")
-            );
-            panic!("gcc exited with failure");
-        }
-    }
-
     run_test(|| {
+        fn temp_file_name(tmp_dir: &TempDir, name: &str) -> String {
+            let file_path = tmp_dir.path().join(name);
+            let file_name = file_path.to_str().expect("failed to get tempdir path");
+            String::from(file_name)
+        }
+
+        // compile foo.c and foo_x_y.c
+        let tmp_dir = TempDir::new("mycc").expect("failed to create temp dir");
+        for name in &["foo", "foo_x_y"] {
+            let output = Command::new("gcc")
+                .args(&[
+                    "-o",
+                    &temp_file_name(&tmp_dir, &format!("{}.o", name)),
+                    "-c",
+                    &format!("testdata/step_14/{}.c", name),
+                ])
+                .output()
+                .expect("failed to compile func declaration");
+            if !output.status.success() {
+                eprintln!(
+                    "{}",
+                    String::from_utf8(output.stderr).expect("failed to output gcc error")
+                );
+                panic!("gcc exited with failure");
+            }
+        }
+
         assert_output(
             "step_14/valid/call_func_01.c",
-            &[OsStr::new("testdata/step_14/foo.o")],
+            &[OsStr::new(&temp_file_name(&tmp_dir, "foo.o"))],
             &[],
             0,
             "OK\n",
@@ -169,7 +178,7 @@ fn step_14_call_func() {
         );
         assert_output(
             "step_14/valid/call_func_02.c",
-            &[OsStr::new("testdata/step_14/foo_x_y.o")],
+            &[OsStr::new(&temp_file_name(&tmp_dir, "foo_x_y.o"))],
             &[],
             0,
             "OK: 3, 12\n",
