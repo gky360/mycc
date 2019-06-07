@@ -102,37 +102,6 @@ impl Compiler {
         };
         self.compile_program(funcs, &mut assembly)?;
 
-        // use Opr::*;
-        // use Reg::*;
-
-        // ctx.inss.clear();
-        // ctx.var_offset.clear();
-
-        // // prolog
-        // ctx.inss.push(Ins::PUSH(Direct(RBP)));
-        // ctx.inss.push(Ins::MOV(Direct(RBP), Direct(RSP)));
-        // // Total size of local variables is not known at this time,
-        // // so mycc first reserve instruction here with `sub rsp, 0`
-        // // and replace `0` with actual size needed after finishing compiling the function.
-        // ctx.inss.push(Ins::SUB(Direct(RSP), Literal(0)));
-        // let ins_id_for_reserve_local_vars = ctx.inss.len() - 1;
-
-        // self.compile_ast(ast)?;
-        // let local_area = 8 * ctx.var_offset.len();
-        // ctx.inss[ins_id_for_reserve_local_vars] = Ins::SUB(Direct(RSP), Literal(local_area as u64));
-        // ctx.inss.stackpos += local_area as i32;
-
-        // // epilogue
-        // ctx.inss.push(Ins::MOV(Direct(RSP), Direct(RBP)));
-        // ctx.inss.push(Ins::POP(Direct(RBP)));
-        // ctx.inss.push(Ins::RET);
-
-        // let fn_main = Function::new("main", ctx.inss);
-        // Ok(Assembly::new(vec![
-        //     Ent::dot("intel_syntax", "noprefix"),
-        //     Ent::dot("global", "main"),
-        //     Ent::Fun(fn_main),
-        // ]))
         Ok(assembly)
     }
 
@@ -149,13 +118,35 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_func(&mut self, name: &str, args: &Vec<String>, body: &Ast) -> Result<Function> {
+    fn compile_func(&mut self, name: &str, _args: &Vec<String>, body: &Ast) -> Result<Function> {
+        use Opr::*;
+        use Reg::*;
+
         let mut ctx = Context {
             inss: Instructions::new(vec![]),
             var_offset: HashMap::new(),
         };
+
+        // prolog
+        ctx.inss.push(Ins::PUSH(Direct(RBP)));
+        ctx.inss.push(Ins::MOV(Direct(RBP), Direct(RSP)));
+        // Total size of local variables is not known at this time,
+        // so mycc first reserve instruction here with `sub rsp, 0`
+        // and replace `0` with actual size needed after finishing compiling the function.
+        ctx.inss.push(Ins::SUB(Direct(RSP), Literal(0)));
+        let ins_id_for_reserve_local_vars = ctx.inss.len() - 1;
+
         self.compile_ast(&mut ctx, body)?;
-        Err(CompileError::not_implemented(Loc::NONE))
+        let local_area = 8 * ctx.var_offset.len();
+        ctx.inss[ins_id_for_reserve_local_vars] = Ins::SUB(Direct(RSP), Literal(local_area as u64));
+        ctx.inss.stackpos += local_area as i32;
+
+        // epilogue
+        ctx.inss.push(Ins::MOV(Direct(RSP), Direct(RBP)));
+        ctx.inss.push(Ins::POP(Direct(RBP)));
+        ctx.inss.push(Ins::RET);
+
+        Ok(Function::new(name, ctx.inss))
     }
 
     fn compile_lval(&mut self, ctx: &mut Context, ast: &Ast) -> Result<()> {
