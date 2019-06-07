@@ -1,2 +1,4 @@
-Return = 1;
-return Return;
+main() {
+    Return = 1;
+    return Return;
+}

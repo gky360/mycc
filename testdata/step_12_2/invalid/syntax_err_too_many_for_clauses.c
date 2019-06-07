@@ -1,3 +1,5 @@
-for (;;;)
-    3;
-return 0;
+main() {
+    for (;;;)
+        3;
+    return 0;
+}

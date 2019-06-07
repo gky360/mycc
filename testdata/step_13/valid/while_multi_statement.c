@@ -1,9 +1,11 @@
-a = 0;
-b = 1;
+main() {
+    a = 0;
+    b = 1;
 
-while (a < 5) {
-    a = a + 2;
-    b = b * a;
+    while (a < 5) {
+        a = a + 2;
+        b = b * a;
+    }
+
+    return a;
 }
-
-return a;
