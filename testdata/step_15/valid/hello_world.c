@@ -13,4 +13,5 @@ main() {
     putchar(100);
     putchar(33);
     putchar(10);
+    return 0;
 }

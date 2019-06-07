@@ -201,7 +201,7 @@ fn step_15_declare_func() {
             &[],
             &[],
             0,
-            "Hello world!",
+            "Hello, World!\n",
             "",
         );
         assert_exit_status("step_15/valid/later_decl.c", &[], &[], 5);
@@ -211,6 +211,6 @@ fn step_15_declare_func() {
         assert_exit_status("step_15/valid/precedence.c", &[], &[], 256 - 3);
         assert_exit_status("step_15/valid/rename_function_param.c", &[], &[], 4);
         assert_exit_status("step_15/valid/single_arg.c", &[], &[], 6);
-        assert_exit_status("step_15/valid/variable_as_arg.c", &[], &[], 4);
+        assert_exit_status("step_15/valid/variable_as_arg.c", &[], &[], 2);
     });
 }

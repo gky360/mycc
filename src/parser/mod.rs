@@ -427,6 +427,7 @@ where
             consume(tokens, TokenKind::Comma)?;
         }
         let (arg, _) = consume_ident(tokens)?;
+        // TODO: check duplicate arg name
         args.push(arg);
     }
     consume(tokens, TokenKind::RParen)?;

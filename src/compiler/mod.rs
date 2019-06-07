@@ -118,7 +118,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_func(&mut self, name: &str, _args: &Vec<String>, body: &Ast) -> Result<Function> {
+    fn compile_func(&mut self, name: &str, args: &Vec<String>, body: &Ast) -> Result<Function> {
         use Opr::*;
         use Reg::*;
 
@@ -135,6 +135,15 @@ impl Compiler {
         // and replace `0` with actual size needed after finishing compiling the function.
         ctx.inss.push(Ins::SUB(Direct(RSP), Literal(0)));
         let ins_id_for_reserve_local_vars = ctx.inss.len() - 1;
+
+        for (i, arg) in args.iter().enumerate() {
+            let offset = 8 * (ctx.var_offset.len() + 1) as u64;
+            ctx.var_offset.insert(arg.clone(), offset);
+            ctx.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
+            ctx.inss.push(Ins::SUB(Direct(RAX), Literal(offset)));
+            ctx.inss
+                .push(Ins::MOV(Indirect(RAX), Direct(Self::ARG_REGS[i])));
+        }
 
         self.compile_ast(&mut ctx, body)?;
         let local_area = 8 * ctx.var_offset.len();
@@ -457,8 +466,10 @@ impl Compiler {
             ctx.inss.push(Ins::ADD(Direct(RSP), Literal(8)));
             ctx.inss.stackpos -= 8;
         }
-
         assert_eq!(ctx.inss.stackpos, org_stackpos);
+
+        // push returned value from called func to stack
+        ctx.inss.push(Ins::PUSH(Direct(RAX)));
         Ok(())
     }
 }
