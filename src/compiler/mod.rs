@@ -73,6 +73,8 @@ pub struct Compiler<'a> {
 }
 
 impl<'a> Compiler<'a> {
+    const ARG_REGS: &'a [Reg] = &[Reg::RDI, Reg::RSI, Reg::RDX, Reg::RCX, Reg::R8, Reg::R9];
+
     pub fn new() -> Compiler<'a> {
         Compiler {
             inss: Instructions::new(Vec::new()),
@@ -171,7 +173,7 @@ impl<'a> Compiler<'a> {
             } => self.compile_binop(op, l, r),
             AstNode::UniOp { ref op, ref e } => self.compile_uniop(op, e),
             AstNode::Ret { ref e } => self.compile_ret(e),
-            AstNode::FuncCall { ref name, .. } => self.compile_func_call(name),
+            AstNode::FuncCall { ref name, ref args } => self.compile_func_call(name, args),
         }
     }
 
@@ -315,28 +317,28 @@ impl<'a> Compiler<'a> {
             self.compile_lval(l)?;
             self.compile_ast(r)?;
 
-            self.inss.push(Ins::POP(Direct(RDI)));
+            self.inss.push(Ins::POP(Direct(R10)));
             self.inss.push(Ins::POP(Direct(RAX)));
-            self.inss.push(Ins::MOV(Indirect(RAX), Direct(RDI)));
-            self.inss.push(Ins::PUSH(Direct(RDI)));
+            self.inss.push(Ins::MOV(Indirect(RAX), Direct(R10)));
+            self.inss.push(Ins::PUSH(Direct(R10)));
             return Ok(());
         }
 
         self.compile_ast(l)?;
         self.compile_ast(r)?;
-        self.inss.push(Ins::POP(Direct(RDI)));
+        self.inss.push(Ins::POP(Direct(R10)));
         self.inss.push(Ins::POP(Direct(RAX)));
         match binop.value {
             BinOpKind::Assign => unreachable!(),
-            BinOpKind::Add => self.inss.push(Ins::ADD(Direct(RAX), Direct(RDI))),
-            BinOpKind::Sub => self.inss.push(Ins::SUB(Direct(RAX), Direct(RDI))),
-            BinOpKind::Mul => self.inss.push(Ins::IMUL(Direct(RDI))),
+            BinOpKind::Add => self.inss.push(Ins::ADD(Direct(RAX), Direct(R10))),
+            BinOpKind::Sub => self.inss.push(Ins::SUB(Direct(RAX), Direct(R10))),
+            BinOpKind::Mul => self.inss.push(Ins::IMUL(Direct(R10))),
             BinOpKind::Div => {
                 self.inss.push(Ins::CQO);
-                self.inss.push(Ins::IDIV(Direct(RDI)));
+                self.inss.push(Ins::IDIV(Direct(R10)));
             }
             BinOpKind::Eq | BinOpKind::Ne | BinOpKind::Lt | BinOpKind::Le => {
-                self.inss.push(Ins::CMP(Direct(RAX), Direct(RDI)));
+                self.inss.push(Ins::CMP(Direct(RAX), Direct(R10)));
                 match binop.value {
                     BinOpKind::Eq => self.inss.push(Ins::SETE(Direct(AL))),
                     BinOpKind::Ne => self.inss.push(Ins::SETNE(Direct(AL))),
@@ -347,7 +349,7 @@ impl<'a> Compiler<'a> {
                 self.inss.push(Ins::MOVZB(Direct(RAX), Direct(AL)));
             }
             BinOpKind::Gt | BinOpKind::Ge => {
-                self.inss.push(Ins::CMP(Direct(RDI), Direct(RAX)));
+                self.inss.push(Ins::CMP(Direct(R10), Direct(RAX)));
                 match binop.value {
                     BinOpKind::Gt => self.inss.push(Ins::SETL(Direct(AL))),
                     BinOpKind::Ge => self.inss.push(Ins::SETLE(Direct(AL))),
@@ -368,11 +370,11 @@ impl<'a> Compiler<'a> {
             UniOpKind::Positive => {}
             UniOpKind::Negative => {
                 // consider -x as 0 - x
-                self.inss.push(Ins::POP(Opr::Direct(Reg::RDI)));
+                self.inss.push(Ins::POP(Opr::Direct(Reg::R10)));
                 self.inss
                     .push(Ins::MOV(Opr::Direct(Reg::RAX), Opr::Literal(0)));
                 self.inss
-                    .push(Ins::SUB(Opr::Direct(Reg::RAX), Opr::Direct(Reg::RDI)));
+                    .push(Ins::SUB(Opr::Direct(Reg::RAX), Opr::Direct(Reg::R10)));
                 self.inss.push(Ins::PUSH(Opr::Direct(Reg::RAX)));
             }
         };
@@ -394,11 +396,16 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn compile_func_call(&mut self, name: &str) -> Result<()> {
+    fn compile_func_call(&mut self, name: &str, args: &'a Vec<Ast>) -> Result<()> {
         use Opr::*;
         use Reg::*;
 
         let org_stackpos = self.inss.stackpos;
+
+        for (i, arg) in args.iter().enumerate() {
+            self.compile_ast(arg)?;
+            self.inss.push(Ins::POP(Direct(Self::ARG_REGS[i])));
+        }
 
         let need_padding = self.inss.stackpos % 16 != 0;
         if need_padding {

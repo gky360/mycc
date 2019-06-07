@@ -277,4 +277,10 @@ pub enum Reg {
     RSI,
     #[strum(serialize = "rdi")]
     RDI,
+    #[strum(serialize = "r8")]
+    R8,
+    #[strum(serialize = "r9")]
+    R9,
+    #[strum(serialize = "r10")]
+    R10,
 }
