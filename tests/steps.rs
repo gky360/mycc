@@ -140,7 +140,7 @@ fn step_13_compound_statement() {
 #[cfg_attr(tarpaulin, skip)]
 fn step_14_call_func() {
     for name in &["foo", "foo_x_y"] {
-        Command::new("gcc")
+        let output = Command::new("gcc")
             .args(&[
                 "-o",
                 &format!("testdata/step_14/{}.o", name),
@@ -149,6 +149,13 @@ fn step_14_call_func() {
             ])
             .output()
             .expect("failed to compile func declaration");
+        if !output.status.success() {
+            eprintln!(
+                "{}",
+                String::from_utf8(output.stderr).expect("failed to output gcc error")
+            );
+            panic!("gcc exited with failure");
+        }
     }
 
     run_test(|| {
