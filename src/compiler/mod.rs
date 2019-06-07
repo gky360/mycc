@@ -151,6 +151,8 @@ impl<'a> Compiler<'a> {
 
     fn compile_ast(&mut self, ast: &'a Ast) -> Result<()> {
         match ast.value {
+            AstNode::Program { .. } => Err(CompileError::not_implemented(ast.loc.clone())),
+            AstNode::Func { .. } => Err(CompileError::not_implemented(ast.loc.clone())),
             AstNode::Block(ref stmts) => self.compile_block(stmts),
             AstNode::StmtIf {
                 ref cond,

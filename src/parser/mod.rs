@@ -103,6 +103,14 @@ impl fmt::Display for ParseError {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AstNode {
+    Program {
+        funcs: Vec<Ast>,
+    },
+    Func {
+        name: String,
+        args: Vec<String>,
+        body: Option<Box<Ast>>,
+    },
     Block(Vec<Ast>),
     StmtIf {
         cond: Box<Ast>,
@@ -142,6 +150,19 @@ pub enum AstNode {
 pub type Ast = Annot<AstNode>;
 
 impl Ast {
+    fn program(funcs: Vec<Ast>, loc: Loc) -> Self {
+        Self::new(AstNode::Program { funcs }, loc)
+    }
+    fn func(name: String, args: Vec<String>, body: Option<Ast>, loc: Loc) -> Self {
+        Self::new(
+            AstNode::Func {
+                name,
+                args,
+                body: body.map(|body| Box::new(body)),
+            },
+            loc,
+        )
+    }
     fn block(stmts: Vec<Ast>, loc: Loc) -> Self {
         Self::new(AstNode::Block(stmts), loc)
     }
@@ -304,9 +325,27 @@ where
     }
 }
 
+fn consume_ident<T>(tokens: &mut Peekable<T>) -> Result<(String, Loc)>
+where
+    T: Iterator<Item = Token>,
+{
+    match tokens.next() {
+        Some(Token {
+            value: TokenKind::Ident(name),
+            loc,
+        }) => Ok((name, loc)),
+        Some(token) => Err(ParseError::NeedTokenBefore(
+            token,
+            vec![TokenKind::Ident("".to_string())],
+        )),
+        None => Err(ParseError::Eof),
+    }
+}
+
 /// Parse tokens with following rules
 ///
-/// program     = stmts
+/// program     = func*
+/// func        = ident "(" (ident ("," ident)*)? ")" (";" | "{" stmts "}")
 /// stmt        = expr ";"
 ///             | "{" stmts "}"
 ///             | stmt_if
@@ -327,7 +366,7 @@ where
 /// unary       = ("+" | "-")? term
 /// term        = num
 ///             | ident
-///             | ident "(" (expr ("," expr)?)? ")"
+///             | ident "(" (expr ("," expr)*)? ")"
 ///             | "(" expr ")"
 fn parse(tokens: Vec<Token>) -> Result<Ast> {
     debug!("parse --");
@@ -345,16 +384,67 @@ fn parse(tokens: Vec<Token>) -> Result<Ast> {
 
 /// Parse program
 ///
-/// program     = stmts
+/// program     = func*
 fn parse_program<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
     debug!("parse_program --");
 
-    let ret = parse_stmts(tokens);
+    let mut loc = Loc::NONE;
+    let mut funcs = vec![];
+    while let Some(_) = tokens.peek() {
+        let func = parse_func(tokens)?;
+        loc = loc.merge(&func.loc);
+        funcs.push(func);
+    }
+    let ret = Ok(Ast::program(funcs, loc));
 
     debug!("parse_program: {:?}", ret);
+    ret
+}
+
+/// Parse func
+///
+/// func        = ident "(" (ident ("," ident)*)? ")" (";" | "{" stmts "}")
+fn parse_func<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_func --");
+
+    let (name, loc) = consume_ident(tokens)?;
+
+    consume(tokens, TokenKind::LParen)?;
+    let mut args = Vec::new();
+    loop {
+        if let Some(TokenKind::RParen) = tokens.peek().map(|token| &token.value) {
+            break;
+        }
+        if args.len() > 0 {
+            consume(tokens, TokenKind::Comma)?;
+        }
+        let (arg, _) = consume_ident(tokens)?;
+        args.push(arg);
+    }
+    consume(tokens, TokenKind::RParen)?;
+
+    let ret = match tokens.peek().map(|token| &token.value) {
+        Some(TokenKind::Semicolon) => Ok(Ast::func(
+            name,
+            args,
+            None,
+            loc.merge(&tokens.next().unwrap().loc),
+        )),
+        _ => {
+            consume(tokens, TokenKind::LBrace)?;
+            let stmts = parse_stmts(tokens)?;
+            let loc = loc.merge(&consume(tokens, TokenKind::RBrace)?);
+            Ok(Ast::func(name, args, Some(stmts), loc))
+        }
+    };
+
+    debug!("parse_func: {:?}", ret);
     ret
 }
 
@@ -717,7 +807,7 @@ where
 ///
 /// term        = num
 ///             | ident
-///             | ident "(" (expr ("," expr)?)? ")"
+///             | ident "(" (expr ("," expr)*)? ")"
 ///             | "(" expr ")"
 fn parse_term<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
