@@ -139,23 +139,33 @@ fn step_13_compound_statement() {
 #[test]
 #[cfg_attr(tarpaulin, skip)]
 fn step_14_call_func() {
-    Command::new("gcc")
-        .args(&[
-            "-o",
-            "testdata/step_14/foo.o",
-            "-c",
-            "testdata/step_14/foo.c",
-        ])
-        .output()
-        .expect("failed to compile func declaration");
+    for name in &["foo", "foo_x_y"] {
+        Command::new("gcc")
+            .args(&[
+                "-o",
+                &format!("testdata/step_14/{}.o", name),
+                "-c",
+                &format!("testdata/step_14/{}.c", name),
+            ])
+            .output()
+            .expect("failed to compile func declaration");
+    }
+
     run_test(|| {
-        let compile_args = vec![OsStr::new("testdata/step_14/foo.o")];
         assert_output(
             "step_14/valid/call_func_01.c",
-            &compile_args,
+            &[OsStr::new("testdata/step_14/foo.o")],
             &[],
             0,
             "OK\n",
+            "",
+        );
+        assert_output(
+            "step_14/valid/call_func_02.c",
+            &[OsStr::new("testdata/step_14/foo_x_y.o")],
+            &[],
+            0,
+            "OK: 3\n",
             "",
         );
     });
