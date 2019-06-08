@@ -1,1 +1,3 @@
-while (1) {
+main() {
+    while (1) {
+}

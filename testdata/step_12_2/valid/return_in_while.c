@@ -1,2 +1,4 @@
-while (1)
-    return 2;
+main() {
+    while (1)
+        return 2;
+}

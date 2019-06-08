@@ -1,5 +1,4 @@
 use env_logger;
-use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::{io, panic};
@@ -28,22 +27,22 @@ fn testdata_path(name: &str) -> PathBuf {
     PathBuf::from("testdata").join(name)
 }
 
-fn compile(asm_path: &Path, exec_path: &Path, compile_args: &[&OsStr]) -> io::Result<Output> {
+fn compile(asm_path: &Path, exec_path: &Path, compile_args: &[&str]) -> io::Result<Output> {
     let mut args = Vec::new();
-    args.push(OsStr::new("-fstack-protector"));
-    args.push(OsStr::new("-o"));
-    args.push(OsStr::new(exec_path.to_str().unwrap()));
-    args.push(OsStr::new(asm_path.to_str().unwrap()));
+    args.push("-fstack-protector");
+    args.push("-o");
+    args.push(exec_path.to_str().unwrap());
+    args.push(asm_path.to_str().unwrap());
     args.extend_from_slice(compile_args);
 
     Command::new("gcc").args(args).output()
 }
 
-fn exec(exec_path: &Path, exec_args: &[&OsStr]) -> io::Result<Output> {
+fn exec(exec_path: &Path, exec_args: &[&str]) -> io::Result<Output> {
     Command::new(exec_path).args(exec_args).output()
 }
 
-fn compile_and_exec(testdata_name: &str, compile_args: &[&OsStr], exec_args: &[&OsStr]) -> Output {
+fn compile_and_exec(testdata_name: &str, compile_args: &[&str], exec_args: &[&str]) -> Output {
     let tmp_dir = TempDir::new("mycc").expect("failed to create temp dir");
     let exec_path = tmp_dir.path().join("a.out");
     let opt = {
@@ -74,8 +73,8 @@ fn compile_and_exec(testdata_name: &str, compile_args: &[&OsStr], exec_args: &[&
 
 pub fn assert_exit_status(
     testdata_name: &str,
-    compile_args: &[&OsStr],
-    exec_args: &[&OsStr],
+    compile_args: &[&str],
+    exec_args: &[&str],
     status: i32,
 ) {
     let output = compile_and_exec(testdata_name, compile_args, exec_args);
@@ -90,20 +89,32 @@ pub fn assert_exit_status(
 
 pub fn assert_output(
     testdata_name: &str,
-    compile_args: &[&OsStr],
-    exec_args: &[&OsStr],
+    compile_args: &[&str],
+    exec_args: &[&str],
     status: i32,
     stdout: &str,
     stderr: &str,
 ) {
     let output = compile_and_exec(testdata_name, compile_args, exec_args);
-    assert_eq!(output.status.code(), Some(status));
+    assert_eq!(
+        output.status.code(),
+        Some(status),
+        "\ntestdata_name: {}\nargs: {:?}",
+        testdata_name,
+        exec_args
+    );
     assert_eq!(
         &String::from_utf8(output.stdout).expect("failed to convert stdout to string"),
-        stdout
+        stdout,
+        "\ntestdata_name: {}\nargs: {:?}",
+        testdata_name,
+        exec_args
     );
     assert_eq!(
         &String::from_utf8(output.stderr).expect("failed to convert stderr to string"),
-        stderr
+        stderr,
+        "\ntestdata_name: {}\nargs: {:?}",
+        testdata_name,
+        exec_args
     );
 }

@@ -8,15 +8,19 @@ mod tests;
 static INDENT: &str = "    ";
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Assembly<'a>(Vec<Ent<'a>>);
+pub struct Assembly(Vec<Ent>);
 
-impl<'a> Assembly<'a> {
-    pub fn new(entries: Vec<Ent<'a>>) -> Assembly {
+impl Assembly {
+    pub fn new(entries: Vec<Ent>) -> Assembly {
         Assembly(entries)
+    }
+
+    pub fn push(&mut self, ent: Ent) {
+        self.0.push(ent);
     }
 }
 
-impl<'a> fmt::Display for Assembly<'a> {
+impl fmt::Display for Assembly {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for ent in self.0.iter() {
             writeln!(f, "{}", ent)?;
@@ -26,19 +30,19 @@ impl<'a> fmt::Display for Assembly<'a> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum Ent<'a> {
+pub enum Ent {
     /// e.g. `.intel_syntax noprefix`
-    Dot(&'a str, &'a str),
+    Dot(String, String),
     /// e.g. `main:`
-    Fun(Function<'a>),
+    Fun(Function),
     /// empty line
     Empty,
     Raw(String),
 }
 
-impl<'a> Ent<'a> {
-    pub fn dot(name: &'a str, content: &'a str) -> Ent<'a> {
-        Ent::Dot(name, content)
+impl Ent {
+    pub fn dot(name: &str, content: &str) -> Ent {
+        Ent::Dot(String::from(name), String::from(content))
     }
 
     pub fn raw(content: &str) -> Ent {
@@ -46,7 +50,7 @@ impl<'a> Ent<'a> {
     }
 }
 
-impl<'a> fmt::Display for Ent<'a> {
+impl fmt::Display for Ent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Ent::*;
         match self {
@@ -59,13 +63,13 @@ impl<'a> fmt::Display for Ent<'a> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Function<'a> {
+pub struct Function {
     name: String,
-    instructions: &'a Instructions,
+    instructions: Instructions,
 }
 
-impl<'a> Function<'a> {
-    pub fn new(name: &str, instructions: &'a Instructions) -> Self {
+impl Function {
+    pub fn new(name: &str, instructions: Instructions) -> Self {
         Function {
             name: String::from(name),
             instructions,
@@ -73,7 +77,7 @@ impl<'a> Function<'a> {
     }
 }
 
-impl<'a> fmt::Display for Function<'a> {
+impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "{}:", self.name)?;
         write!(f, "{}", self.instructions)
@@ -105,8 +109,7 @@ impl Instructions {
                 self.stackpos += 8;
             }
             Ins::POP(_) => {
-                // TODO: check if stackops >= 0
-                // assert!(self.stackpos >= 8, "tried to pop empty stack");
+                assert!(self.stackpos >= 8, "tried to pop empty stack");
                 self.stackpos -= 8;
             }
             _ => {}

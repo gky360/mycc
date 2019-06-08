@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate log;
 
-use std::ffi::OsStr;
 use std::process::Command;
 use tempdir::TempDir;
 
@@ -170,7 +169,7 @@ fn step_14_call_func() {
 
         assert_output(
             "step_14/valid/call_func_01.c",
-            &[OsStr::new(&temp_file_name(&tmp_dir, "foo.o"))],
+            &[&temp_file_name(&tmp_dir, "foo.o")],
             &[],
             0,
             "OK\n",
@@ -178,11 +177,40 @@ fn step_14_call_func() {
         );
         assert_output(
             "step_14/valid/call_func_02.c",
-            &[OsStr::new(&temp_file_name(&tmp_dir, "foo_x_y.o"))],
+            &[&temp_file_name(&tmp_dir, "foo_x_y.o")],
             &[],
             0,
             "OK: 3, 12\n",
             "",
         );
+    });
+}
+
+#[test]
+#[cfg_attr(tarpaulin, skip)]
+fn step_15_declare_func() {
+    run_test(|| {
+        assert_exit_status("step_15/valid/expression_args.c", &[], &[], 14);
+        assert_exit_status("step_15/valid/fib.c", &[], &[], 5);
+        assert_exit_status("step_15/valid/forward_decl.c", &[], &[], 3);
+        assert_exit_status("step_15/valid/forward_decl_args.c", &[], &[], 4);
+        assert_exit_status("step_15/valid/forward_decl_multi_arg.c", &[], &[], 256 - 1);
+        assert_exit_status("step_15/valid/fun_in_expr.c", &[], &[], 16);
+        assert_output(
+            "step_15/valid/hello_world.c",
+            &[],
+            &[],
+            0,
+            "Hello, World!\n",
+            "",
+        );
+        assert_exit_status("step_15/valid/later_decl.c", &[], &[], 5);
+        assert_exit_status("step_15/valid/multi_arg.c", &[], &[], 4);
+        assert_exit_status("step_15/valid/mutual_recursion.c", &[], &[], 12);
+        assert_exit_status("step_15/valid/no_arg.c", &[], &[], 3);
+        assert_exit_status("step_15/valid/precedence.c", &[], &[], 256 - 3);
+        assert_exit_status("step_15/valid/rename_function_param.c", &[], &[], 4);
+        assert_exit_status("step_15/valid/single_arg.c", &[], &[], 6);
+        assert_exit_status("step_15/valid/variable_as_arg.c", &[], &[], 2);
     });
 }

@@ -174,9 +174,9 @@ impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::TokenKind::*;
         match self {
-            Number(n) => n.fmt(f),
-            Ident(ref name) => name.fmt(f),
-            Keyword(key) => key.fmt(f),
+            Number(_) => write!(f, "{{number}}"),
+            Ident(_) => write!(f, "{{identifier}}"),
+            Keyword(key) => write!(f, "keyword {}", key),
             Plus => write!(f, "+"),
             Minus => write!(f, "-"),
             Asterisk => write!(f, "*"),

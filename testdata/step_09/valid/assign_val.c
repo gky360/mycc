@@ -1,1 +1,3 @@
-b = a = 0;
+main() {
+    return b = a = 0;
+}

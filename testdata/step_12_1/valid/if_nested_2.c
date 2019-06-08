@@ -1,7 +1,9 @@
-a = 0;
-b = 1;
-if (a)
+main() {
+    a = 0;
     b = 1;
-else if (b)
-    b = 2;
-return b;
+    if (a)
+        b = 1;
+    else if (b)
+        b = 2;
+    return b;
+}
