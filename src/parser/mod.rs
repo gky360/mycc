@@ -1,4 +1,5 @@
 use failure::Fail;
+use std::collections::HashSet;
 use std::fmt;
 use std::iter::Peekable;
 use std::str::FromStr;
@@ -101,7 +102,7 @@ impl fmt::Display for ParseError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AstNode {
     Program {
         funcs: Vec<Ast>,
@@ -109,6 +110,7 @@ pub enum AstNode {
     Func {
         name: String,
         args: Vec<String>,
+        lvars: HashSet<String>,
         body: Box<Ast>,
     },
     Block(Vec<Ast>),
@@ -153,11 +155,12 @@ impl Ast {
     fn program(funcs: Vec<Ast>, loc: Loc) -> Self {
         Self::new(AstNode::Program { funcs }, loc)
     }
-    fn func(name: String, args: Vec<String>, body: Ast, loc: Loc) -> Self {
+    fn func(name: String, args: Vec<String>, lvars: HashSet<String>, body: Ast, loc: Loc) -> Self {
         Self::new(
             AstNode::Func {
                 name,
                 args,
+                lvars,
                 body: Box::new(body),
             },
             loc,
@@ -309,6 +312,11 @@ impl UniOp {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Context {
+    lvars: HashSet<String>,
+}
+
 fn consume<T>(tokens: &mut Peekable<T>, kind: TokenKind) -> Result<Loc>
 where
     T: Iterator<Item = Token>,
@@ -415,6 +423,10 @@ where
 {
     debug!("parse_func --");
 
+    let mut ctx = Context {
+        lvars: HashSet::new(),
+    };
+
     let (name, loc) = consume_ident(tokens)?;
 
     consume(tokens, TokenKind::LParen)?;
@@ -440,9 +452,9 @@ where
         }
         _ => {
             consume(tokens, TokenKind::LBrace)?;
-            let stmts = parse_stmts(tokens)?;
+            let stmts = parse_stmts(&mut ctx, tokens)?;
             let loc = loc.merge(&consume(tokens, TokenKind::RBrace)?);
-            Ok(Some(Ast::func(name, args, stmts, loc)))
+            Ok(Some(Ast::func(name, args, ctx.lvars, stmts, loc)))
         }
     };
 
@@ -458,7 +470,7 @@ where
 ///             | stmt_while
 ///             | stmt_for
 ///             | stmt_return
-fn parse_stmt<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+fn parse_stmt<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
@@ -467,16 +479,16 @@ where
     let stmt = match tokens.peek().map(|token| &token.value) {
         Some(TokenKind::LBrace) => {
             consume(tokens, TokenKind::LBrace)?;
-            let stmts = parse_stmts(tokens)?;
+            let stmts = parse_stmts(ctx, tokens)?;
             consume(tokens, TokenKind::RBrace)?;
             stmts
         }
-        Some(TokenKind::Keyword(Keyword::If)) => parse_stmt_if(tokens)?,
-        Some(TokenKind::Keyword(Keyword::While)) => parse_stmt_while(tokens)?,
-        Some(TokenKind::Keyword(Keyword::For)) => parse_stmt_for(tokens)?,
-        Some(TokenKind::Keyword(Keyword::Return)) => parse_stmt_return(tokens)?,
+        Some(TokenKind::Keyword(Keyword::If)) => parse_stmt_if(ctx, tokens)?,
+        Some(TokenKind::Keyword(Keyword::While)) => parse_stmt_while(ctx, tokens)?,
+        Some(TokenKind::Keyword(Keyword::For)) => parse_stmt_for(ctx, tokens)?,
+        Some(TokenKind::Keyword(Keyword::Return)) => parse_stmt_return(ctx, tokens)?,
         _ => {
-            let e = parse_expr(tokens)?;
+            let e = parse_expr(ctx, tokens)?;
             let semi_loc = consume(tokens, TokenKind::Semicolon)?;
             Ast::new(e.value, e.loc.merge(&semi_loc))
         }
@@ -490,7 +502,7 @@ where
 /// Parse stmts
 ///
 /// stmts       = stmt*
-fn parse_stmts<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+fn parse_stmts<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
@@ -502,7 +514,7 @@ where
         if token.value == TokenKind::RBrace {
             break;
         }
-        let stmt = parse_stmt(tokens)?;
+        let stmt = parse_stmt(ctx, tokens)?;
         loc = loc.merge(&stmt.loc);
         stmts.push(stmt);
     }
@@ -515,7 +527,7 @@ where
 /// Parse stmt_if
 ///
 /// stmt_if     = "if" "(" expr ")" stmt ("else" stmt)?
-fn parse_stmt_if<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+fn parse_stmt_if<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
@@ -523,14 +535,14 @@ where
 
     let if_loc = consume(tokens, TokenKind::Keyword(Keyword::If))?;
     consume(tokens, TokenKind::LParen)?;
-    let cond = parse_expr(tokens)?;
+    let cond = parse_expr(ctx, tokens)?;
     consume(tokens, TokenKind::RParen)?;
-    let stmt = parse_stmt(tokens)?;
+    let stmt = parse_stmt(ctx, tokens)?;
 
     let ret = match tokens.peek().map(|token| &token.value) {
         Some(TokenKind::Keyword(Keyword::Else)) => {
             tokens.next();
-            let els = parse_stmt(tokens)?;
+            let els = parse_stmt(ctx, tokens)?;
             let loc = if_loc.merge(&els.loc);
             Ok(Ast::stmt_if(cond, stmt, Some(els), loc))
         }
@@ -547,7 +559,7 @@ where
 /// Parse stmt_while
 ///
 /// stmt_while  = "while" "(" expr ")" stmt
-fn parse_stmt_while<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+fn parse_stmt_while<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
@@ -555,9 +567,9 @@ where
 
     let while_loc = consume(tokens, TokenKind::Keyword(Keyword::While))?;
     consume(tokens, TokenKind::LParen)?;
-    let cond = parse_expr(tokens)?;
+    let cond = parse_expr(ctx, tokens)?;
     consume(tokens, TokenKind::RParen)?;
-    let stmt = parse_stmt(tokens)?;
+    let stmt = parse_stmt(ctx, tokens)?;
 
     let loc = while_loc.merge(&stmt.loc);
     let ret = Ok(Ast::stmt_while(cond, stmt, loc));
@@ -569,7 +581,7 @@ where
 /// Parse stmt_for
 ///
 /// stmt_for    = "for" "(" expr? ";" expr? ";" expr? ")" stmt
-fn parse_stmt_for<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+fn parse_stmt_for<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
@@ -579,20 +591,20 @@ where
     consume(tokens, TokenKind::LParen)?;
     let init = match tokens.peek().map(|token| &token.value) {
         Some(TokenKind::Semicolon) => None,
-        _ => Some(parse_expr(tokens)?),
+        _ => Some(parse_expr(ctx, tokens)?),
     };
     consume(tokens, TokenKind::Semicolon)?;
     let cond = match tokens.peek().map(|token| &token.value) {
         Some(TokenKind::Semicolon) => None,
-        _ => Some(parse_expr(tokens)?),
+        _ => Some(parse_expr(ctx, tokens)?),
     };
     consume(tokens, TokenKind::Semicolon)?;
     let incr = match tokens.peek().map(|token| &token.value) {
         Some(TokenKind::Semicolon) => None,
-        _ => Some(parse_expr(tokens)?),
+        _ => Some(parse_expr(ctx, tokens)?),
     };
     consume(tokens, TokenKind::RParen)?;
-    let stmt = parse_stmt(tokens)?;
+    let stmt = parse_stmt(ctx, tokens)?;
 
     let loc = for_loc.merge(&stmt.loc);
     let ret = Ok(Ast::stmt_for(init, cond, incr, stmt, loc));
@@ -604,14 +616,14 @@ where
 /// Parse stmt_return
 ///
 /// stmt_return = "return" expr ";"
-fn parse_stmt_return<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+fn parse_stmt_return<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
     debug!("parse_stmt_return --");
 
     let ret_loc = consume(tokens, TokenKind::Keyword(Keyword::Return))?;
-    let e = parse_expr(tokens)?;
+    let e = parse_expr(ctx, tokens)?;
     let semi_loc = consume(tokens, TokenKind::Semicolon)?;
     let ret = Ok(Ast::ret(e, ret_loc.merge(&semi_loc)));
 
@@ -622,13 +634,13 @@ where
 /// Parse expr
 ///
 /// expr        = assign
-fn parse_expr<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+fn parse_expr<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
     debug!("parse_expr --");
 
-    let ret = parse_assign(tokens);
+    let ret = parse_assign(ctx, tokens);
 
     debug!("parse_expr: {:?}", ret);
     ret
@@ -637,13 +649,13 @@ where
 /// Parse assign
 ///
 /// assign      = equality ("=" assign)?
-fn parse_assign<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+fn parse_assign<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
     debug!("parse_assign --");
 
-    let e = parse_equality(tokens)?;
+    let e = parse_equality(ctx, tokens)?;
 
     let ret = match tokens.peek() {
         Some(Token {
@@ -651,7 +663,7 @@ where
             ..
         }) => {
             let op = BinOp::assign(tokens.next().unwrap().loc);
-            let r = parse_assign(tokens)?;
+            let r = parse_assign(ctx, tokens)?;
             let loc = e.loc.merge(&r.loc);
             Ok(Ast::binop(op, e, r, loc))
         }
@@ -665,13 +677,13 @@ where
 /// Parse equality
 ///
 /// equality    = relational ("==" relational | "!=" relational)*
-fn parse_equality<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+fn parse_equality<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
     debug!("parse_equality --");
 
-    let mut e = parse_relational(tokens)?;
+    let mut e = parse_relational(ctx, tokens)?;
 
     while let Some(token) = tokens.peek() {
         let op = match token.value {
@@ -679,7 +691,7 @@ where
             TokenKind::Ne => BinOp::ne(tokens.next().unwrap().loc),
             _ => break,
         };
-        let r = parse_relational(tokens)?;
+        let r = parse_relational(ctx, tokens)?;
         let loc = e.loc.merge(&r.loc);
         e = Ast::binop(op, e, r, loc);
     }
@@ -692,13 +704,13 @@ where
 /// Parse relational
 ///
 /// relational  = add ("<" add | "<=" add | ">" add | ">=" add)*
-fn parse_relational<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+fn parse_relational<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
     debug!("parse_relational --");
 
-    let mut e = parse_add(tokens)?;
+    let mut e = parse_add(ctx, tokens)?;
 
     while let Some(token) = tokens.peek() {
         let op = match token.value {
@@ -708,7 +720,7 @@ where
             TokenKind::Ge => BinOp::ge(tokens.next().unwrap().loc),
             _ => break,
         };
-        let r = parse_add(tokens)?;
+        let r = parse_add(ctx, tokens)?;
         let loc = e.loc.merge(&r.loc);
         e = Ast::binop(op, e, r, loc);
     }
@@ -721,13 +733,13 @@ where
 /// Parse add
 ///
 /// add         = mul ("+" mul | "-" mul)*
-fn parse_add<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+fn parse_add<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
     debug!("parse_add --");
 
-    let mut e = parse_mul(tokens)?;
+    let mut e = parse_mul(ctx, tokens)?;
 
     while let Some(token) = tokens.peek() {
         let op = match token.value {
@@ -735,7 +747,7 @@ where
             TokenKind::Minus => BinOp::sub(tokens.next().unwrap().loc),
             _ => break,
         };
-        let r = parse_mul(tokens)?;
+        let r = parse_mul(ctx, tokens)?;
         let loc = e.loc.merge(&r.loc);
         e = Ast::binop(op, e, r, loc);
     }
@@ -748,13 +760,13 @@ where
 /// Parse mul
 ///
 /// mul         = unary ("*" unary | "/" unary)*
-fn parse_mul<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+fn parse_mul<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
     debug!("parse_mul --");
 
-    let mut e = parse_unary(tokens)?;
+    let mut e = parse_unary(ctx, tokens)?;
 
     while let Some(token) = tokens.peek() {
         let op = match token.value {
@@ -762,7 +774,7 @@ where
             TokenKind::Slash => BinOp::div(tokens.next().unwrap().loc),
             _ => break,
         };
-        let r = parse_unary(tokens)?;
+        let r = parse_unary(ctx, tokens)?;
         let loc = e.loc.merge(&r.loc);
         e = Ast::binop(op, e, r, loc);
     }
@@ -775,7 +787,7 @@ where
 /// Parse unary
 ///
 /// unary       = ("+" | "-")? term
-fn parse_unary<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+fn parse_unary<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
@@ -794,11 +806,11 @@ where
                 } => UniOp::negative(loc),
                 _ => unreachable!(),
             };
-            let e = parse_term(tokens)?;
+            let e = parse_term(ctx, tokens)?;
             let loc = op.loc.merge(&e.loc);
             Ok(Ast::uniop(op, e, loc))
         }
-        _ => parse_term(tokens),
+        _ => parse_term(ctx, tokens),
     };
 
     debug!("parse_unary: {:?}", ret);
@@ -811,7 +823,7 @@ where
 ///             | ident
 ///             | ident "(" (expr ("," expr)*)? ")"
 ///             | "(" expr ")"
-fn parse_term<T>(tokens: &mut Peekable<T>) -> Result<Ast>
+fn parse_term<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
@@ -831,15 +843,19 @@ where
                     if args.len() > 0 {
                         consume(tokens, TokenKind::Comma)?;
                     }
-                    args.push(parse_expr(tokens)?);
+                    args.push(parse_expr(ctx, tokens)?);
                 }
                 let loc = consume(tokens, TokenKind::RParen)?;
                 Ok(Ast::funcall(name, args, token.loc.merge(&loc)))
             }
-            _ => Ok(Ast::ident(name, token.loc)),
+            _ => {
+                // TODO: explicit var declaration
+                ctx.lvars.insert(name.clone());
+                Ok(Ast::ident(name, token.loc))
+            }
         },
         TokenKind::LParen => {
-            let e = parse_expr(tokens)?;
+            let e = parse_expr(ctx, tokens)?;
             match tokens.next() {
                 Some(Token {
                     value: TokenKind::RParen,

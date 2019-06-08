@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::asm::{Assembly, Ent, Function, Ins, Instructions, Label, Opr, Reg};
@@ -104,18 +104,29 @@ impl Compiler {
 
     fn compile_program(&mut self, funcs: &Vec<Ast>, assembly: &mut Assembly) -> Result<()> {
         for func in funcs {
-            let (name, args, body) = match &func.value {
-                AstNode::Func { name, args, body } => (name, args, body),
+            let (name, args, lvars, body) = match &func.value {
+                AstNode::Func {
+                    name,
+                    args,
+                    lvars,
+                    body,
+                } => (name, args, lvars, body),
                 _ => unreachable!("ast node under Program should be Func"),
             };
             assembly.push(Ent::dot("global", name));
-            assembly.push(Ent::Fun(self.compile_func(name, args, body)?));
+            assembly.push(Ent::Fun(self.compile_func(name, args, lvars, body)?));
         }
 
         Ok(())
     }
 
-    fn compile_func(&mut self, name: &str, args: &Vec<String>, body: &Ast) -> Result<Function> {
+    fn compile_func(
+        &mut self,
+        name: &str,
+        args: &Vec<String>,
+        lvars: &HashSet<String>,
+        body: &Ast,
+    ) -> Result<Function> {
         use Opr::*;
         use Reg::*;
 
@@ -129,12 +140,18 @@ impl Compiler {
         // prolog
         ctx.inss.push(Ins::PUSH(Direct(RBP)));
         ctx.inss.push(Ins::MOV(Direct(RBP), Direct(RSP)));
-        // Total size of local variables is not known at this time,
-        // so mycc first reserve instruction here with `sub rsp, 0`
-        // and replace `0` with actual size needed after finishing compiling the function.
-        ctx.inss.push(Ins::SUB(Direct(RSP), Literal(0)));
-        let ins_id_for_reserve_local_vars = ctx.inss.len() - 1;
 
+        // TODO: remove after supporting explicit declaration
+        let mut lvars = lvars.clone();
+        for arg in args {
+            lvars.remove(arg);
+        }
+
+        let local_area = 8 * (args.len() + lvars.len()) as u64;
+        ctx.inss.push(Ins::SUB(Direct(RSP), Literal(local_area)));
+        ctx.inss.stackpos += local_area as i32;
+
+        // setup var_offset
         for (i, arg) in args.iter().enumerate() {
             let offset = 8 * (ctx.var_offset.len() + 1) as u64;
             ctx.var_offset.insert(arg.clone(), offset);
@@ -143,11 +160,12 @@ impl Compiler {
             ctx.inss
                 .push(Ins::MOV(Indirect(RAX), Direct(Self::ARG_REGS[i])));
         }
+        for lvar in lvars {
+            let offset = 8 * (ctx.var_offset.len() + 1) as u64;
+            ctx.var_offset.insert(lvar.clone(), offset);
+        }
 
         self.compile_ast(&mut ctx, body)?;
-        let local_area = 8 * ctx.var_offset.len();
-        ctx.inss[ins_id_for_reserve_local_vars] = Ins::SUB(Direct(RSP), Literal(local_area as u64));
-        ctx.inss.stackpos += local_area as i32;
 
         // epilogue
         ctx.inss.push(Ins::DefLabel(ctx.ret_label));
@@ -164,14 +182,13 @@ impl Compiler {
 
         match &ast.value {
             AstNode::Ident(name) => {
-                let offset = {
-                    match ctx.var_offset.get(name) {
-                        Some(offset) => *offset,
-                        None => {
-                            let offset = 8 * (ctx.var_offset.len() + 1) as u64;
-                            ctx.var_offset.insert(name.clone(), offset);
-                            offset
-                        }
+                let offset = match ctx.var_offset.get(name) {
+                    Some(offset) => *offset,
+                    None => {
+                        unreachable!("local variable not found");
+                        // let offset = 8 * (ctx.var_offset.len() + 1) as u64;
+                        // ctx.var_offset.insert(name.clone(), offset);
+                        // offset
                     }
                 };
                 ctx.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));

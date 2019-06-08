@@ -109,8 +109,7 @@ impl Instructions {
                 self.stackpos += 8;
             }
             Ins::POP(_) => {
-                // TODO: check if stackops >= 0
-                // assert!(self.stackpos >= 8, "tried to pop empty stack");
+                assert!(self.stackpos >= 8, "tried to pop empty stack");
                 self.stackpos -= 8;
             }
             _ => {}
