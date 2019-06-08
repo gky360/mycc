@@ -69,6 +69,7 @@ impl fmt::Display for CompileError {
 struct Context {
     inss: Instructions,
     var_offset: HashMap<String, u64>,
+    ret_label: Label,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,11 +81,7 @@ impl Compiler {
     const ARG_REGS: &'static [Reg] = &[Reg::RDI, Reg::RSI, Reg::RDX, Reg::RCX, Reg::R8, Reg::R9];
 
     pub fn new() -> Compiler {
-        Compiler {
-            // inss: Instructions::new(Vec::new()),
-            // var_offset: HashMap::new(),
-            next_label_id: 0,
-        }
+        Compiler { next_label_id: 0 }
     }
 
     fn increment_label_id(&mut self) -> usize {
@@ -122,9 +119,11 @@ impl Compiler {
         use Opr::*;
         use Reg::*;
 
+        let id = self.increment_label_id();
         let mut ctx = Context {
             inss: Instructions::new(vec![]),
             var_offset: HashMap::new(),
+            ret_label: Label::new("end", id),
         };
 
         // prolog
@@ -151,6 +150,7 @@ impl Compiler {
         ctx.inss.stackpos += local_area as i32;
 
         // epilogue
+        ctx.inss.push(Ins::DefLabel(ctx.ret_label));
         ctx.inss.push(Ins::MOV(Direct(RSP), Direct(RBP)));
         ctx.inss.push(Ins::POP(Direct(RBP)));
         ctx.inss.push(Ins::RET);
@@ -432,9 +432,7 @@ impl Compiler {
         self.compile_ast(ctx, e)?;
 
         ctx.inss.push(Ins::POP(Direct(RAX)));
-        ctx.inss.push(Ins::MOV(Direct(RSP), Direct(RBP)));
-        ctx.inss.push(Ins::POP(Direct(RBP)));
-        ctx.inss.push(Ins::RET);
+        ctx.inss.push(Ins::JMP(ctx.ret_label));
 
         Ok(())
     }
