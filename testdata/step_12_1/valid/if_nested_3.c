@@ -1,5 +1,5 @@
-main() {
-    a = 0;
+int main() {
+    int a = 0;
     if (1)
         if (2)
             a = 3;

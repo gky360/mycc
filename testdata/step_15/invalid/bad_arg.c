@@ -1,7 +1,7 @@
-foo(a){
+int foo(int a){
     return 3 + a;
 }
 
-main(){
+int main(){
     return foo();
 }

@@ -1,11 +1,11 @@
-foo(a);
-bar(b);
+int foo(int a);
+int bar(int b);
 
-main() {
+int main() {
     return foo(5);
 }
 
-foo(a) {
+int foo(int a) {
     if (a <= 0) {
         return a;
     }
@@ -13,7 +13,7 @@ foo(a) {
     return a + bar(a - 1);
 }
 
-bar(b) {
+int bar(int b) {
     if (b <= 0) {
         return b;
     }

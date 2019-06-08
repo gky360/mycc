@@ -1,7 +1,7 @@
-sub_3(x, y, z) {
+int sub_3(int x, int y, int z) {
     return x - y - z;
 }
 
-main() {
+int main() {
     return sub_3(10, 4, 2);
 }

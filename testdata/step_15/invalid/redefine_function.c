@@ -1,11 +1,11 @@
-foo(){
+int foo(){
     return 3;
 }
 
-main() {
+int main() {
     return foo();
 }
 
-foo(){
+int foo(){
     return 4;
 }

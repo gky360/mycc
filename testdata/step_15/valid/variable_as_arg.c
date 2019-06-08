@@ -1,8 +1,8 @@
-foo(x) {
+int foo(int x) {
     return x + 1;
 }
 
-main() {
-    a = 1;
+int main() {
+    int a = 1;
     return foo(a);
 }

@@ -1,9 +1,9 @@
-foo(a, b);
+int foo(int a, int b);
 
-main() {
+int main() {
     return 5;
 }
 
-foo(a) {
+int foo(int a) {
     return 4;
 }

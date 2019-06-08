@@ -1,4 +1,5 @@
-main() {
-    a = 2
-    return a = a + 4;
+int main() {
+    int a = 2
+    a = a + 4;
+    return a;
 }
