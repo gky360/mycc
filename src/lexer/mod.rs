@@ -120,6 +120,8 @@ pub enum Keyword {
     For,
     #[strum(serialize = "if")]
     If,
+    #[strum(serialize = "int")]
+    Int,
     #[strum(serialize = "return")]
     Return,
     #[strum(serialize = "while")]
