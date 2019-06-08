@@ -242,6 +242,10 @@ impl Compiler {
         for ast in stmts {
             self.compile_ast(ctx, ast)?;
             ctx.inss.push(Ins::POP(Direct(RAX)));
+            if let AstNode::Ret { .. } = ast.value {
+                // ignore statements after return statement
+                break;
+            }
         }
         ctx.inss.push(Ins::PUSH(Direct(RAX)));
 
