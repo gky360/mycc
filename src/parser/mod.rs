@@ -353,14 +353,14 @@ where
 /// Parse tokens with following rules
 ///
 /// program     = func*
-/// func        = ident "(" (ident ("," ident)*)? ")" (";" | "{" stmts "}")
+/// func        = ident "(" (ident ("," ident)*)? ")" (";" | block)
 /// stmt        = expr ";"
-///             | "{" stmts "}"
+///             | block
 ///             | stmt_if
 ///             | stmt_while
 ///             | stmt_for
 ///             | stmt_return
-/// stmts       = stmt*
+/// block       = "{" stmt* "}"
 /// stmt_if     = "if" "(" expr ")" stmt ("else" stmt)?
 /// stmt_while  = "while" "(" expr ")" stmt
 /// stmt_for    = "for" "(" expr? ";" expr? ";" expr? ")" stmt
@@ -416,7 +416,7 @@ where
 
 /// Parse func
 ///
-/// func        = ident "(" (ident ("," ident)*)? ")" (";" | "{" stmts "}")
+/// func        = ident "(" (ident ("," ident)*)? ")" (";" | block)
 fn parse_func<T>(tokens: &mut Peekable<T>) -> Result<Option<Ast>>
 where
     T: Iterator<Item = Token>,
@@ -451,10 +451,9 @@ where
             Ok(None)
         }
         _ => {
-            consume(tokens, TokenKind::LBrace)?;
-            let stmts = parse_stmts(&mut ctx, tokens)?;
-            let loc = loc.merge(&consume(tokens, TokenKind::RBrace)?);
-            Ok(Some(Ast::func(name, args, ctx.lvars, stmts, loc)))
+            let block = parse_block(&mut ctx, tokens)?;
+            let loc = loc.merge(&block.loc);
+            Ok(Some(Ast::func(name, args, ctx.lvars, block, loc)))
         }
     };
 
@@ -465,7 +464,7 @@ where
 /// Parse stmt
 ///
 /// stmt        = expr ";"
-///             | "{" stmts "}"
+///             | block
 ///             | stmt_if
 ///             | stmt_while
 ///             | stmt_for
@@ -477,12 +476,7 @@ where
     debug!("parse_stmt --");
 
     let stmt = match tokens.peek().map(|token| &token.value) {
-        Some(TokenKind::LBrace) => {
-            consume(tokens, TokenKind::LBrace)?;
-            let stmts = parse_stmts(ctx, tokens)?;
-            consume(tokens, TokenKind::RBrace)?;
-            stmts
-        }
+        Some(TokenKind::LBrace) => parse_block(ctx, tokens)?,
         Some(TokenKind::Keyword(Keyword::If)) => parse_stmt_if(ctx, tokens)?,
         Some(TokenKind::Keyword(Keyword::While)) => parse_stmt_while(ctx, tokens)?,
         Some(TokenKind::Keyword(Keyword::For)) => parse_stmt_for(ctx, tokens)?,
@@ -499,28 +493,28 @@ where
     ret
 }
 
-/// Parse stmts
+/// Parse block
 ///
-/// stmts       = stmt*
-fn parse_stmts<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
+/// block       = "{" stmt* "}"
+fn parse_block<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
-    debug!("parse_stmts --");
+    debug!("parse_block --");
 
-    let mut loc = Loc::NONE;
+    let loc = consume(tokens, TokenKind::LBrace)?;
     let mut stmts = vec![];
     while let Some(token) = tokens.peek() {
         if token.value == TokenKind::RBrace {
             break;
         }
         let stmt = parse_stmt(ctx, tokens)?;
-        loc = loc.merge(&stmt.loc);
         stmts.push(stmt);
     }
+    let loc = loc.merge(&consume(tokens, TokenKind::RBrace)?);
     let ret = Ok(Ast::block(stmts, loc));
 
-    debug!("parse_stmts: {:?}", ret);
+    debug!("parse_block: {:?}", ret);
     ret
 }
 
