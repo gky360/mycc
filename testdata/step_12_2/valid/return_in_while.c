@@ -1,4 +1,5 @@
-main() {
-    while (1)
+int main() {
+    while (1) {
         return 2;
+    }
 }

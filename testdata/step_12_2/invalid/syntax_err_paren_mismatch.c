@@ -1,4 +1,4 @@
-main() {
-    for (i = 2; ))
-        a = 0;
+int main() {
+    for (int i = 2; ))
+        int a = 0;
 }

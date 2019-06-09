@@ -4,7 +4,7 @@ use std::fmt;
 use std::iter::Peekable;
 use std::str::FromStr;
 
-use super::lexer::{Annot, Keyword, LexError, Lexer, Loc, Token, TokenKind};
+use super::lexer::{Annot, Keyword, LexError, Lexer, Loc, Token, TokenKind, TypeName};
 
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]
@@ -21,6 +21,9 @@ pub enum ParseError {
     UnclosedOpenParen(Token),
     RedundantExpression(Token),
     NeedTokenBefore(Token, Vec<TokenKind>),
+    NeedTypeNameBefore(Token),
+    Redefinition(Token),
+    Undeclared(Token),
     Eof,
 }
 
@@ -34,7 +37,10 @@ impl ParseError {
             | NotExpression(Token { ref loc, .. })
             | NotOperator(Token { ref loc, .. })
             | UnclosedOpenParen(Token { ref loc, .. })
-            | NeedTokenBefore(Token { ref loc, .. }, _) => loc,
+            | NeedTokenBefore(Token { ref loc, .. }, _)
+            | NeedTypeNameBefore(Token { ref loc, .. })
+            | Redefinition(Token { ref loc, .. })
+            | Undeclared(Token { ref loc, .. }) => loc,
             RedundantExpression(Token { loc, .. }) => {
                 temp_loc = Loc(loc.0, input.len());
                 &temp_loc
@@ -97,6 +103,13 @@ impl fmt::Display for ParseError {
                     }
                 }
             }
+            NeedTypeNameBefore(token) => write!(
+                f,
+                "{}: expected type name before '{}'",
+                token.loc, token.value
+            ),
+            Redefinition(token) => write!(f, "{}: redefinition of '{}'", token.loc, token.value),
+            Undeclared(token) => write!(f, "{}: '{}' undeclared", token.loc, token.value),
             Eof => write!(f, "unexpected end of file"),
         }
     }
@@ -129,6 +142,7 @@ pub enum AstNode {
         incr: Option<Box<Ast>>,
         stmt: Box<Ast>,
     },
+    StmtNull,
     Num(u64),
     Ident(String),
     BinOp {
@@ -204,6 +218,9 @@ impl Ast {
             },
             loc,
         )
+    }
+    fn stmt_null(loc: Loc) -> Self {
+        Self::new(AstNode::StmtNull, loc)
     }
     fn num(n: u64, loc: Loc) -> Self {
         // call Annot::new
@@ -314,6 +331,7 @@ impl UniOp {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Context {
+    args: Vec<String>,
     lvars: HashSet<String>,
 }
 
@@ -350,21 +368,37 @@ where
     }
 }
 
+fn consume_type_name<T>(tokens: &mut Peekable<T>) -> Result<(TypeName, Loc)>
+where
+    T: Iterator<Item = Token>,
+{
+    match tokens.next() {
+        Some(Token {
+            value: TokenKind::TypeName(ty),
+            loc,
+        }) => Ok((ty, loc)),
+        Some(token) => Err(ParseError::NeedTypeNameBefore(token)),
+        None => Err(ParseError::Eof),
+    }
+}
+
 /// Parse tokens with following rules
 ///
 /// program     = func*
-/// func        = ident "(" (ident ("," ident)*)? ")" (";" | block)
+/// func        = "int" ident "(" ("int" ident ("," "int" ident)*)? ")" (";" | block)
 /// stmt        = expr ";"
 ///             | block
 ///             | stmt_if
 ///             | stmt_while
 ///             | stmt_for
 ///             | stmt_return
+///             | decl ";"
 /// block       = "{" stmt* "}"
 /// stmt_if     = "if" "(" expr ")" stmt ("else" stmt)?
 /// stmt_while  = "while" "(" expr ")" stmt
-/// stmt_for    = "for" "(" expr? ";" expr? ";" expr? ")" stmt
+/// stmt_for    = "for" "(" (decl | expr)? ";" expr? ";" expr? ")" stmt
 /// stmt_return = "return" expr ";"
+/// decl        = "int" ident ("=" assign)?
 /// expr        = assign
 /// assign      = equality ("=" assign)?
 /// equality    = relational ("==" relational | "!=" relational)*
@@ -416,7 +450,7 @@ where
 
 /// Parse func
 ///
-/// func        = ident "(" (ident ("," ident)*)? ")" (";" | block)
+/// func        = "int" ident "(" ("int" ident ("," "int" ident)*)? ")" (";" | block)
 fn parse_func<T>(tokens: &mut Peekable<T>) -> Result<Option<Ast>>
 where
     T: Iterator<Item = Token>,
@@ -424,23 +458,25 @@ where
     debug!("parse_func --");
 
     let mut ctx = Context {
+        args: Vec::new(),
         lvars: HashSet::new(),
     };
 
-    let (name, loc) = consume_ident(tokens)?;
+    let (_, loc) = consume_type_name(tokens)?;
+    let (name, _) = consume_ident(tokens)?;
 
     consume(tokens, TokenKind::LParen)?;
-    let mut args = Vec::new();
     loop {
         if let Some(TokenKind::RParen) = tokens.peek().map(|token| &token.value) {
             break;
         }
-        if args.len() > 0 {
+        if ctx.args.len() > 0 {
             consume(tokens, TokenKind::Comma)?;
         }
+        consume_type_name(tokens)?;
         let (arg, _) = consume_ident(tokens)?;
         // TODO: check duplicate arg name
-        args.push(arg);
+        ctx.args.push(arg);
     }
     consume(tokens, TokenKind::RParen)?;
 
@@ -453,7 +489,7 @@ where
         _ => {
             let block = parse_block(&mut ctx, tokens)?;
             let loc = loc.merge(&block.loc);
-            Ok(Some(Ast::func(name, args, ctx.lvars, block, loc)))
+            Ok(Some(Ast::func(name, ctx.args, ctx.lvars, block, loc)))
         }
     };
 
@@ -481,6 +517,11 @@ where
         Some(TokenKind::Keyword(Keyword::While)) => parse_stmt_while(ctx, tokens)?,
         Some(TokenKind::Keyword(Keyword::For)) => parse_stmt_for(ctx, tokens)?,
         Some(TokenKind::Keyword(Keyword::Return)) => parse_stmt_return(ctx, tokens)?,
+        Some(TokenKind::TypeName(_)) => {
+            let decl = parse_decl(ctx, tokens)?;
+            let semi_loc = consume(tokens, TokenKind::Semicolon)?;
+            Ast::new(decl.value, decl.loc.merge(&semi_loc))
+        }
         _ => {
             let e = parse_expr(ctx, tokens)?;
             let semi_loc = consume(tokens, TokenKind::Semicolon)?;
@@ -574,7 +615,7 @@ where
 
 /// Parse stmt_for
 ///
-/// stmt_for    = "for" "(" expr? ";" expr? ";" expr? ")" stmt
+/// stmt_for    = "for" "(" (decl | expr)? ";" expr? ";" expr? ")" stmt
 fn parse_stmt_for<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -585,6 +626,7 @@ where
     consume(tokens, TokenKind::LParen)?;
     let init = match tokens.peek().map(|token| &token.value) {
         Some(TokenKind::Semicolon) => None,
+        Some(TokenKind::TypeName(_)) => Some(parse_decl(ctx, tokens)?),
         _ => Some(parse_expr(ctx, tokens)?),
     };
     consume(tokens, TokenKind::Semicolon)?;
@@ -622,6 +664,37 @@ where
     let ret = Ok(Ast::ret(e, ret_loc.merge(&semi_loc)));
 
     debug!("parse_stmt_return: {:?}", ret);
+    ret
+}
+
+/// Parse decl
+///
+/// decl        = "int" ident ("=" assign)?
+fn parse_decl<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_decl --");
+
+    let (_, loc) = consume_type_name(tokens)?;
+    let (name, ident_loc) = consume_ident(tokens)?;
+    if !ctx.lvars.insert(name.clone()) {
+        // already declared
+        return Err(ParseError::Redefinition(Token::ident(&name, ident_loc)));
+    }
+
+    let ret = match tokens.peek().map(|token| &token.value) {
+        Some(TokenKind::Assign) => {
+            let op = BinOp::assign(consume(tokens, TokenKind::Assign)?);
+            let e = Ast::ident(name, ident_loc);
+            let r = parse_assign(ctx, tokens)?;
+            let loc = loc.merge(&r.loc);
+            Ok(Ast::binop(op, e, r, loc))
+        }
+        _ => Ok(Ast::stmt_null(loc.merge(&ident_loc))),
+    };
+
+    debug!("parse_decl: {:?}", ret);
     ret
 }
 
@@ -843,9 +916,12 @@ where
                 Ok(Ast::funcall(name, args, token.loc.merge(&loc)))
             }
             _ => {
-                // TODO: explicit var declaration
-                ctx.lvars.insert(name.clone());
-                Ok(Ast::ident(name, token.loc))
+                // TODO: support env
+                if ctx.args.contains(&name) || ctx.lvars.contains(&name) {
+                    Ok(Ast::ident(name, token.loc))
+                } else {
+                    Err(ParseError::Undeclared(Token::ident(&name, token.loc)))
+                }
             }
         },
         TokenKind::LParen => {

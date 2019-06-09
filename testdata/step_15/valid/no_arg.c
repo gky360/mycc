@@ -1,7 +1,7 @@
-three(){
+int three(){
     return 3;
 }
 
-main() {
+int main() {
     return three();
 }

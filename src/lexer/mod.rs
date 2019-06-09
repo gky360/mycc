@@ -126,6 +126,12 @@ pub enum Keyword {
     While,
 }
 
+#[derive(Display, EnumString, Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum TypeName {
+    #[strum(serialize = "int")]
+    Int,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenKind {
     /// [0-9]+
@@ -134,6 +140,8 @@ pub enum TokenKind {
     Ident(String),
     /// keyword
     Keyword(Keyword),
+    /// type name
+    TypeName(TypeName),
     /// +
     Plus,
     /// -
@@ -177,6 +185,7 @@ impl fmt::Display for TokenKind {
             Number(_) => write!(f, "{{number}}"),
             Ident(_) => write!(f, "{{identifier}}"),
             Keyword(key) => write!(f, "keyword {}", key),
+            TypeName(ty) => write!(f, "type name {}", ty),
             Plus => write!(f, "+"),
             Minus => write!(f, "-"),
             Asterisk => write!(f, "*"),
@@ -209,6 +218,9 @@ impl Token {
     }
     pub fn keyword(keyword: Keyword, loc: Loc) -> Self {
         Self::new(TokenKind::Keyword(keyword), loc)
+    }
+    pub fn type_name(ty: TypeName, loc: Loc) -> Self {
+        Self::new(TokenKind::TypeName(ty), loc)
     }
     pub fn plus(loc: Loc) -> Self {
         Self::new(TokenKind::Plus, loc)
@@ -295,7 +307,9 @@ impl<'a> Lexer<'a> {
 
             match self.input[pos] {
                 b'0'..=b'9' => lex_a_token!(self.lex_number()),
-                b'a'..=b'z' | b'A'..=b'Z' | b'_' => lex_a_token!(self.lex_keyword_or_ident()),
+                b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
+                    lex_a_token!(self.lex_keyword_or_type_name_or_ident())
+                }
                 b'+' => lex_a_token!(self.lex_plus()),
                 b'-' => lex_a_token!(self.lex_minus()),
                 b'*' => lex_a_token!(self.lex_asterisk()),
@@ -351,7 +365,7 @@ impl<'a> Lexer<'a> {
         Ok(Token::number(n, Loc(start, end)))
     }
 
-    fn lex_keyword_or_ident(&self) -> Result<Token> {
+    fn lex_keyword_or_type_name_or_ident(&self) -> Result<Token> {
         let start = *self.pos.borrow();
         let end = self.recognize_many(|b| {
             (b'a' <= b && b <= b'z')
@@ -361,9 +375,11 @@ impl<'a> Lexer<'a> {
         });
         let name = from_utf8(&self.input[start..end]).unwrap();
 
-        // try to lex keyword
+        // try to lex keyword or type name
         if let Ok(keyword) = Keyword::from_str(name) {
             Ok(Token::keyword(keyword, Loc(start, end)))
+        } else if let Ok(ty) = TypeName::from_str(name) {
+            Ok(Token::type_name(ty, Loc(start, end)))
         } else {
             Ok(Token::ident(name, Loc(start, end)))
         }

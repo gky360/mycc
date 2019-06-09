@@ -1,6 +1,7 @@
-main() {
-    a = 1;
-    b = 0;
-    if (a) b = 1;
+int main() {
+    int a = 1;
+    int b = 0;
+    if (a)
+        b = 1;
     return b;
 }

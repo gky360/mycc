@@ -15,8 +15,13 @@ fn assert_parse_error(name: &str) {
     let source = load_source(name).expect("failed to load test source file");
     match Ast::from_str(&source) {
         Ok(_) => assert!(false, "parser returned no error: {}", name),
-        Err(ParseError::Lex(_)) => assert!(false, "lexer returned error: {}", name),
-        Err(_) => assert!(true),
+        Err(err) => {
+            err.show_diagnostic(&source);
+            if let ParseError::Lex(_) = err {
+                assert!(false, "lexer returned error: {}", name);
+            }
+            assert!(true);
+        }
     }
 }
 
@@ -71,11 +76,26 @@ fn step_14_call_func() {
 #[test]
 fn step_15_declare_func() {
     let names: &[&str] = &[
+        // TODO: comment in these tests
         // "step_15/invalid/bad_arg.c",
         // "step_15/invalid/declaration_mismatch.c",
         // "step_15/invalid/declaration_mismatch_2.c",
         // "step_15/invalid/redefine_function.c",
         // "step_15/invalid/too_many_args.c",
+    ];
+    names.iter().for_each(|name| assert_parse_error(name))
+}
+
+#[test]
+fn step_16_explicit_declare() {
+    let names = &[
+        "step_16/invalid/double_define.c",
+        "step_16/invalid/if_assignment.c",
+        "step_16/invalid/redefine.c",
+        "step_16/invalid/syntax_err_bad_decl.c",
+        "step_16/invalid/syntax_err_bad_decl_2.c",
+        "step_16/invalid/undeclared_var.c",
+        "step_16/invalid/var_declared_late.c",
     ];
     names.iter().for_each(|name| assert_parse_error(name))
 }

@@ -1,8 +1,8 @@
-add(a, b) {
+int add(int a, int b) {
     return a + b;
 }
 
-main() {
-    sum = add(1 + 2, 4);
+int main() {
+    int sum = add(1 + 2, 4);
     return sum + sum;
 }
