@@ -4,7 +4,7 @@ use std::fmt;
 use std::iter::Peekable;
 use std::str::FromStr;
 
-use super::lexer::{Annot, Keyword, LexError, Lexer, Loc, Token, TokenKind};
+use super::lexer::{Annot, Keyword, LexError, Lexer, Loc, Token, TokenKind, TypeName};
 
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]
@@ -21,6 +21,7 @@ pub enum ParseError {
     UnclosedOpenParen(Token),
     RedundantExpression(Token),
     NeedTokenBefore(Token, Vec<TokenKind>),
+    NeedTypeNameBefore(Token),
     Eof,
 }
 
@@ -34,7 +35,8 @@ impl ParseError {
             | NotExpression(Token { ref loc, .. })
             | NotOperator(Token { ref loc, .. })
             | UnclosedOpenParen(Token { ref loc, .. })
-            | NeedTokenBefore(Token { ref loc, .. }, _) => loc,
+            | NeedTokenBefore(Token { ref loc, .. }, _)
+            | NeedTypeNameBefore(Token { ref loc, .. }) => loc,
             RedundantExpression(Token { loc, .. }) => {
                 temp_loc = Loc(loc.0, input.len());
                 &temp_loc
@@ -97,6 +99,11 @@ impl fmt::Display for ParseError {
                     }
                 }
             }
+            NeedTypeNameBefore(token) => write!(
+                f,
+                "{}: expected type name before '{}'",
+                token.loc, token.value
+            ),
             Eof => write!(f, "unexpected end of file"),
         }
     }
@@ -350,21 +357,37 @@ where
     }
 }
 
+fn consume_type_name<T>(tokens: &mut Peekable<T>) -> Result<(TypeName, Loc)>
+where
+    T: Iterator<Item = Token>,
+{
+    match tokens.next() {
+        Some(Token {
+            value: TokenKind::TypeName(ty),
+            loc,
+        }) => Ok((ty, loc)),
+        Some(token) => Err(ParseError::NeedTypeNameBefore(token)),
+        None => Err(ParseError::Eof),
+    }
+}
+
 /// Parse tokens with following rules
 ///
 /// program     = func*
-/// func        = ident "(" (ident ("," ident)*)? ")" (";" | block)
+/// func        = "int" ident "(" ("int" ident ("," "int" ident)*)? ")" (";" | block)
 /// stmt        = expr ";"
 ///             | block
 ///             | stmt_if
 ///             | stmt_while
 ///             | stmt_for
 ///             | stmt_return
+///             | decl ";"
 /// block       = "{" stmt* "}"
 /// stmt_if     = "if" "(" expr ")" stmt ("else" stmt)?
 /// stmt_while  = "while" "(" expr ")" stmt
-/// stmt_for    = "for" "(" expr? ";" expr? ";" expr? ")" stmt
+/// stmt_for    = "for" "(" (decl | expr)? ";" expr? ";" expr? ")" stmt
 /// stmt_return = "return" expr ";"
+/// decl        = "int" ident ("=" assign)?
 /// expr        = assign
 /// assign      = equality ("=" assign)?
 /// equality    = relational ("==" relational | "!=" relational)*
@@ -416,7 +439,7 @@ where
 
 /// Parse func
 ///
-/// func        = ident "(" (ident ("," ident)*)? ")" (";" | block)
+/// func        = "int" ident "(" ("int" ident ("," "int" ident)*)? ")" (";" | block)
 fn parse_func<T>(tokens: &mut Peekable<T>) -> Result<Option<Ast>>
 where
     T: Iterator<Item = Token>,
@@ -427,7 +450,8 @@ where
         lvars: HashSet::new(),
     };
 
-    let (name, loc) = consume_ident(tokens)?;
+    let (_, loc) = consume_type_name(tokens)?;
+    let (name, _) = consume_ident(tokens)?;
 
     consume(tokens, TokenKind::LParen)?;
     let mut args = Vec::new();
@@ -438,6 +462,7 @@ where
         if args.len() > 0 {
             consume(tokens, TokenKind::Comma)?;
         }
+        consume_type_name(tokens)?;
         let (arg, _) = consume_ident(tokens)?;
         // TODO: check duplicate arg name
         args.push(arg);
