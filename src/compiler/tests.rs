@@ -7,7 +7,7 @@ use crate::parser::Ast;
 fn step_09_syntax_err_bad_lvalue() {
     let source = r##"
 int main() {
-    a = 2;
+    int a = 2;
     a + 3 = 4;
 }
 "##;
@@ -15,6 +15,6 @@ int main() {
     let mut compiler = Compiler::new();
     assert_eq!(
         compiler.compile(&ast),
-        Err(CompileError::lval_required(Loc(29, 34)))
+        Err(CompileError::lval_required(Loc(33, 38)))
     );
 }

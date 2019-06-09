@@ -202,12 +202,8 @@ impl Compiler {
 
     fn compile_ast(&mut self, ctx: &mut Context, ast: &Ast) -> Result<()> {
         match ast.value {
-            // AstNode::Program { ref funcs } => self.compile_program(funcs),
-            // AstNode::Func {
-            //     ref name,
-            //     ref args,
-            //     ref body,
-            // } => self.compile_func(name, args, body),
+            AstNode::Program { .. } => unreachable!("invalid ast structure"),
+            AstNode::Func { .. } => unreachable!("invalid ast structure"),
             AstNode::Block(ref stmts) => self.compile_block(ctx, stmts),
             AstNode::StmtIf {
                 ref cond,
@@ -221,6 +217,11 @@ impl Compiler {
                 ref incr,
                 ref stmt,
             } => self.compile_stmt_for(ctx, init, cond, incr, stmt),
+            AstNode::StmtNull => {
+                // push dummy result
+                ctx.inss.push(Ins::PUSH(Opr::Direct(Reg::RAX)));
+                Ok(())
+            }
             AstNode::Num(num) => self.compile_num(ctx, num),
             AstNode::Ident(_) => self.compile_ident(ctx, ast),
             AstNode::BinOp {
@@ -231,7 +232,6 @@ impl Compiler {
             AstNode::UniOp { ref op, ref e } => self.compile_uniop(ctx, op, e),
             AstNode::Ret { ref e } => self.compile_ret(ctx, e),
             AstNode::FuncCall { ref name, ref args } => self.compile_func_call(ctx, name, args),
-            _ => unreachable!("invalid ast structure"),
         }
     }
 
