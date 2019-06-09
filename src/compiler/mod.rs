@@ -141,12 +141,6 @@ impl Compiler {
         ctx.inss.push(Ins::PUSH(Direct(RBP)));
         ctx.inss.push(Ins::MOV(Direct(RBP), Direct(RSP)));
 
-        // TODO: remove after supporting explicit declaration
-        let mut lvars = lvars.clone();
-        for arg in args {
-            lvars.remove(arg);
-        }
-
         let local_area = 8 * (args.len() + lvars.len()) as u64;
         ctx.inss.push(Ins::SUB(Direct(RSP), Literal(local_area)));
         ctx.inss.stackpos += local_area as i32;
@@ -184,12 +178,7 @@ impl Compiler {
             AstNode::Ident(name) => {
                 let offset = match ctx.var_offset.get(name) {
                     Some(offset) => *offset,
-                    None => {
-                        unreachable!("local variable not found");
-                        // let offset = 8 * (ctx.var_offset.len() + 1) as u64;
-                        // ctx.var_offset.insert(name.clone(), offset);
-                        // offset
-                    }
+                    None => unreachable!("local variable not found"),
                 };
                 ctx.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
                 ctx.inss.push(Ins::SUB(Direct(RAX), Literal(offset)));

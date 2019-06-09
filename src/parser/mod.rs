@@ -23,6 +23,7 @@ pub enum ParseError {
     NeedTokenBefore(Token, Vec<TokenKind>),
     NeedTypeNameBefore(Token),
     Redefinition(Token),
+    Undeclared(Token),
     Eof,
 }
 
@@ -38,7 +39,8 @@ impl ParseError {
             | UnclosedOpenParen(Token { ref loc, .. })
             | NeedTokenBefore(Token { ref loc, .. }, _)
             | NeedTypeNameBefore(Token { ref loc, .. })
-            | Redefinition(Token { ref loc, .. }) => loc,
+            | Redefinition(Token { ref loc, .. })
+            | Undeclared(Token { ref loc, .. }) => loc,
             RedundantExpression(Token { loc, .. }) => {
                 temp_loc = Loc(loc.0, input.len());
                 &temp_loc
@@ -107,6 +109,7 @@ impl fmt::Display for ParseError {
                 token.loc, token.value
             ),
             Redefinition(token) => write!(f, "{}: redefinition of '{}'", token.loc, token.value),
+            Undeclared(token) => write!(f, "{}: '{}' undeclared", token.loc, token.value),
             Eof => write!(f, "unexpected end of file"),
         }
     }
@@ -328,6 +331,7 @@ impl UniOp {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Context {
+    args: Vec<String>,
     lvars: HashSet<String>,
 }
 
@@ -454,6 +458,7 @@ where
     debug!("parse_func --");
 
     let mut ctx = Context {
+        args: Vec::new(),
         lvars: HashSet::new(),
     };
 
@@ -461,18 +466,17 @@ where
     let (name, _) = consume_ident(tokens)?;
 
     consume(tokens, TokenKind::LParen)?;
-    let mut args = Vec::new();
     loop {
         if let Some(TokenKind::RParen) = tokens.peek().map(|token| &token.value) {
             break;
         }
-        if args.len() > 0 {
+        if ctx.args.len() > 0 {
             consume(tokens, TokenKind::Comma)?;
         }
         consume_type_name(tokens)?;
         let (arg, _) = consume_ident(tokens)?;
         // TODO: check duplicate arg name
-        args.push(arg);
+        ctx.args.push(arg);
     }
     consume(tokens, TokenKind::RParen)?;
 
@@ -485,7 +489,7 @@ where
         _ => {
             let block = parse_block(&mut ctx, tokens)?;
             let loc = loc.merge(&block.loc);
-            Ok(Some(Ast::func(name, args, ctx.lvars, block, loc)))
+            Ok(Some(Ast::func(name, ctx.args, ctx.lvars, block, loc)))
         }
     };
 
@@ -911,7 +915,13 @@ where
                 let loc = consume(tokens, TokenKind::RParen)?;
                 Ok(Ast::funcall(name, args, token.loc.merge(&loc)))
             }
-            _ => Ok(Ast::ident(name, token.loc)),
+            _ => {
+                if ctx.args.contains(&name) || ctx.lvars.contains(&name) {
+                    Ok(Ast::ident(name, token.loc))
+                } else {
+                    Err(ParseError::Undeclared(Token::ident(&name, token.loc)))
+                }
+            }
         },
         TokenKind::LParen => {
             let e = parse_expr(ctx, tokens)?;
