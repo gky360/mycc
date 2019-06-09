@@ -916,6 +916,7 @@ where
                 Ok(Ast::funcall(name, args, token.loc.merge(&loc)))
             }
             _ => {
+                // TODO: support env
                 if ctx.args.contains(&name) || ctx.lvars.contains(&name) {
                     Ok(Ast::ident(name, token.loc))
                 } else {

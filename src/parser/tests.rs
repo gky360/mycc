@@ -83,7 +83,7 @@ fn step_15_declare_func() {
 
 #[test]
 fn step_16_explicit_declare() {
-    let names: &[&str] = &[
+    let names = &[
         "step_16/invalid/double_define.c",
         "step_16/invalid/if_assignment.c",
         "step_16/invalid/redefine.c",
