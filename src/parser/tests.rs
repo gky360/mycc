@@ -80,3 +80,17 @@ fn step_15_declare_func() {
     ];
     names.iter().for_each(|name| assert_parse_error(name))
 }
+
+#[test]
+fn step_16_explicit_declare() {
+    let names: &[&str] = &[
+        "step_16/invalid/double_define.c",
+        "step_16/invalid/if_assignment.c",
+        "step_16/invalid/redefine.c",
+        "step_16/invalid/syntax_err_bad_decl.c",
+        "step_16/invalid/syntax_err_bad_decl_2.c",
+        "step_16/invalid/undeclared_var.c",
+        "step_16/invalid/var_declared_late.c",
+    ];
+    names.iter().for_each(|name| assert_parse_error(name))
+}
