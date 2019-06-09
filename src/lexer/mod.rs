@@ -375,7 +375,7 @@ impl<'a> Lexer<'a> {
         });
         let name = from_utf8(&self.input[start..end]).unwrap();
 
-        // try to lex keyword
+        // try to lex keyword or type name
         if let Ok(keyword) = Keyword::from_str(name) {
             Ok(Token::keyword(keyword, Loc(start, end)))
         } else if let Ok(ty) = TypeName::from_str(name) {
