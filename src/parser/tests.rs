@@ -15,8 +15,13 @@ fn assert_parse_error(name: &str) {
     let source = load_source(name).expect("failed to load test source file");
     match Ast::from_str(&source) {
         Ok(_) => assert!(false, "parser returned no error: {}", name),
-        Err(ParseError::Lex(_)) => assert!(false, "lexer returned error: {}", name),
-        Err(_) => assert!(true),
+        Err(err) => {
+            err.show_diagnostic(&source);
+            if let ParseError::Lex(_) = err {
+                assert!(false, "lexer returned error: {}", name);
+            }
+            assert!(true);
+        }
     }
 }
 
