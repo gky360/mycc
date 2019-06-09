@@ -673,31 +673,21 @@ where
     debug!("parse_decl --");
 
     let (_, loc) = consume_type_name(tokens)?;
-    let ident = tokens.next().ok_or(ParseError::Eof)?;
-    let name = match &ident.value {
-        TokenKind::Ident(name) => {
-            if !ctx.lvars.insert(name.clone()) {
-                // already declared
-                return Err(ParseError::Redefinition(ident));
-            }
-            name
-        }
-        _ => {
-            return Err(ParseError::NeedTokenBefore(
-                ident,
-                vec![TokenKind::Ident("".to_string())],
-            ))
-        }
-    };
+    let (name, ident_loc) = consume_ident(tokens)?;
+    if !ctx.lvars.insert(name.clone()) {
+        // already declared
+        return Err(ParseError::Redefinition(Token::ident(&name, ident_loc)));
+    }
+
     let ret = match tokens.peek().map(|token| &token.value) {
         Some(TokenKind::Assign) => {
             let op = BinOp::assign(consume(tokens, TokenKind::Assign)?);
-            let e = Ast::ident(name.clone(), ident.loc);
+            let e = Ast::ident(name, ident_loc);
             let r = parse_assign(ctx, tokens)?;
             let loc = loc.merge(&r.loc);
             Ok(Ast::binop(op, e, r, loc))
         }
-        _ => Ok(Ast::stmt_null(loc.merge(&ident.loc))),
+        _ => Ok(Ast::stmt_null(loc.merge(&ident_loc))),
     };
 
     debug!("parse_decl: {:?}", ret);
