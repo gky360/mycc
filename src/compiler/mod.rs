@@ -1,9 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt;
 
 use crate::asm::{Assembly, Ent, Function, Ins, Instructions, Label, Opr, Reg};
 use crate::lexer::{Annot, Loc};
-use crate::parser::{Ast, AstNode, BinOp, BinOpKind, UniOp, UniOpKind};
+use crate::parser::{Ast, AstNode, BinOp, BinOpKind, Type, UniOp, UniOpKind};
 
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]
@@ -123,8 +123,8 @@ impl Compiler {
     fn compile_func(
         &mut self,
         name: &str,
-        args: &Vec<String>,
-        lvars: &HashSet<String>,
+        args: &Vec<(String, Type)>,
+        lvars: &HashMap<String, Type>,
         body: &Ast,
     ) -> Result<Function> {
         use Opr::*;
@@ -146,7 +146,7 @@ impl Compiler {
         ctx.inss.stackpos += local_area as i32;
 
         // setup var_offset
-        for (i, arg) in args.iter().enumerate() {
+        for (i, (arg, _)) in args.iter().enumerate() {
             let offset = 8 * (ctx.var_offset.len() + 1) as u64;
             ctx.var_offset.insert(arg.clone(), offset);
             ctx.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
@@ -154,7 +154,7 @@ impl Compiler {
             ctx.inss
                 .push(Ins::MOV(Indirect(RAX), Direct(Self::ARG_REGS[i])));
         }
-        for lvar in lvars {
+        for (lvar, _) in lvars {
             let offset = 8 * (ctx.var_offset.len() + 1) as u64;
             ctx.var_offset.insert(lvar.clone(), offset);
         }

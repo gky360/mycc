@@ -1,5 +1,5 @@
 use failure::Fail;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::fmt;
 use std::iter::Peekable;
 use std::str::FromStr;
@@ -142,8 +142,8 @@ pub enum AstNode {
     },
     Func {
         name: String,
-        args: Vec<String>,
-        lvars: HashSet<String>,
+        args: Vec<(String, Type)>,
+        lvars: HashMap<String, Type>,
         body: Box<Ast>,
     },
     Block(Vec<Ast>),
@@ -189,7 +189,13 @@ impl Ast {
     fn program(funcs: Vec<Ast>, loc: Loc) -> Self {
         Self::new(AstNode::Program { funcs }, loc)
     }
-    fn func(name: String, args: Vec<String>, lvars: HashSet<String>, body: Ast, loc: Loc) -> Self {
+    fn func(
+        name: String,
+        args: Vec<(String, Type)>,
+        lvars: HashMap<String, Type>,
+        body: Ast,
+        loc: Loc,
+    ) -> Self {
         Self::new(
             AstNode::Func {
                 name,
@@ -351,8 +357,8 @@ impl UniOp {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Context {
-    args: Vec<String>,
-    lvars: HashSet<String>,
+    args: Vec<(String, Type)>,
+    lvars: HashMap<String, Type>,
 }
 
 fn consume<T>(tokens: &mut Peekable<T>, kind: TokenKind) -> Result<Loc>
@@ -479,7 +485,7 @@ where
 
     let mut ctx = Context {
         args: Vec::new(),
-        lvars: HashSet::new(),
+        lvars: HashMap::new(),
     };
 
     let (_, loc) = consume_type_name(tokens)?;
@@ -496,7 +502,8 @@ where
         consume_type_name(tokens)?;
         let (arg, _) = consume_ident(tokens)?;
         // TODO: check duplicate arg name
-        ctx.args.push(arg);
+        // TODO: parse type
+        ctx.args.push((arg, Type::Int));
     }
     consume(tokens, TokenKind::RParen)?;
 
@@ -698,7 +705,8 @@ where
 
     let (_, loc) = consume_type_name(tokens)?;
     let (name, ident_loc) = consume_ident(tokens)?;
-    if !ctx.lvars.insert(name.clone()) {
+    // TODO: parse type
+    if ctx.lvars.insert(name.clone(), Type::Int).is_some() {
         // already declared
         return Err(ParseError::Redefinition(Token::ident(&name, ident_loc)));
     }
@@ -937,7 +945,9 @@ where
             }
             _ => {
                 // TODO: support env
-                if ctx.args.contains(&name) || ctx.lvars.contains(&name) {
+                if ctx.args.iter().find(|&(item, _)| item == &name).is_some()
+                    || ctx.lvars.get(&name).is_some()
+                {
                     Ok(Ast::ident(name, token.loc))
                 } else {
                     Err(ParseError::Undeclared(Token::ident(&name, token.loc)))
