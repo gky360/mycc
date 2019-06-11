@@ -68,7 +68,7 @@ impl fmt::Display for CompileError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Context {
     inss: Instructions,
-    var_offset: HashMap<String, u64>,
+    var_offset: HashMap<String, (Type, u64)>,
     ret_label: Label,
 }
 
@@ -146,17 +146,17 @@ impl Compiler {
         ctx.inss.stackpos += local_area as i32;
 
         // setup var_offset
-        for (i, (arg, _)) in args.iter().enumerate() {
+        for (i, (arg, ty)) in args.iter().enumerate() {
             let offset = 8 * (ctx.var_offset.len() + 1) as u64;
-            ctx.var_offset.insert(arg.clone(), offset);
+            ctx.var_offset.insert(arg.clone(), (ty.clone(), offset));
             ctx.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
             ctx.inss.push(Ins::SUB(Direct(RAX), Literal(offset)));
             ctx.inss
                 .push(Ins::MOV(Indirect(RAX), Direct(Self::ARG_REGS[i])));
         }
-        for (lvar, _) in lvars {
+        for (lvar, ty) in lvars {
             let offset = 8 * (ctx.var_offset.len() + 1) as u64;
-            ctx.var_offset.insert(lvar.clone(), offset);
+            ctx.var_offset.insert(lvar.clone(), (ty.clone(), offset));
         }
 
         self.compile_ast(&mut ctx, body)?;
@@ -176,12 +176,12 @@ impl Compiler {
 
         match &ast.value {
             AstNode::Ident(name) => {
-                let offset = match ctx.var_offset.get(name) {
-                    Some(offset) => *offset,
+                let (_, offset) = match ctx.var_offset.get(name) {
+                    Some(offset) => offset,
                     None => unreachable!("local variable not found"),
                 };
                 ctx.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
-                ctx.inss.push(Ins::SUB(Direct(RAX), Literal(offset)));
+                ctx.inss.push(Ins::SUB(Direct(RAX), Literal(*offset)));
                 ctx.inss.push(Ins::PUSH(Direct(RAX)));
                 Ok(())
             }
