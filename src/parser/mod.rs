@@ -115,6 +115,26 @@ impl fmt::Display for ParseError {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Type {
+    Int,
+    Ptr(Box<Type>),
+}
+
+impl Type {
+    fn ptr(ty: Type) -> Self {
+        Type::Ptr(Box::new(ty))
+    }
+}
+
+impl From<TypeName> for Type {
+    fn from(type_name: TypeName) -> Self {
+        match type_name {
+            TypeName::Int => Type::Int,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AstNode {
     Program {
