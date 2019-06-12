@@ -430,6 +430,8 @@ impl Compiler {
                     .push(Ins::SUB(Opr::Direct(Reg::RAX), Opr::Direct(Reg::R10)));
                 ctx.inss.push(Ins::PUSH(Opr::Direct(Reg::RAX)));
             }
+            UniOpKind::Addr => unreachable!("addr can not be compiled yet"),
+            UniOpKind::Deref => unreachable!("deref can not be compiled yet"),
         };
 
         Ok(())

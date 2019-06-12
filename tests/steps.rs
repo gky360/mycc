@@ -219,6 +219,6 @@ fn step_15_declare_func() {
 #[cfg_attr(tarpaulin, skip)]
 fn step_17_pointer() {
     run_test(|| {
-        // assert_exit_status("step_17/valid/pointer_01.c", &[], &[], 3);
+        assert_exit_status("step_17/valid/pointer_01.c", &[], &[], 3);
     });
 }

@@ -342,6 +342,8 @@ impl BinOp {
 pub enum UniOpKind {
     Positive,
     Negative,
+    Addr,
+    Deref,
 }
 
 pub type UniOp = Annot<UniOpKind>;
@@ -352,6 +354,12 @@ impl UniOp {
     }
     fn negative(loc: Loc) -> Self {
         Self::new(UniOpKind::Negative, loc)
+    }
+    fn addr(loc: Loc) -> Self {
+        Self::new(UniOpKind::Addr, loc)
+    }
+    fn deref(loc: Loc) -> Self {
+        Self::new(UniOpKind::Deref, loc)
     }
 }
 
@@ -432,7 +440,7 @@ where
 /// relational  = add ("<" add | "<=" add | ">" add | ">=" add)*
 /// add         = mul ("+" mul | "-" mul)*
 /// mul         = unary ("*" unary | "/" unary)*
-/// unary       = ("+" | "-")? term
+/// unary       = ("+" | "-" | "&" | "*")? term
 /// term        = num
 ///             | ident
 ///             | ident "(" (expr ("," expr)*)? ")"
@@ -906,7 +914,7 @@ where
 
 /// Parse unary
 ///
-/// unary       = ("+" | "-")? term
+/// unary       = ("+" | "-" | "&" | "*")? term
 fn parse_unary<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -914,16 +922,16 @@ where
     debug!("parse_unary --");
 
     let ret = match tokens.peek().map(|token| &token.value) {
-        Some(TokenKind::Plus) | Some(TokenKind::Minus) => {
-            let op = match tokens.next().unwrap() {
-                Token {
-                    value: TokenKind::Plus,
-                    loc,
-                } => UniOp::positive(loc),
-                Token {
-                    value: TokenKind::Minus,
-                    loc,
-                } => UniOp::negative(loc),
+        Some(TokenKind::Plus)
+        | Some(TokenKind::Minus)
+        | Some(TokenKind::Amp)
+        | Some(TokenKind::Asterisk) => {
+            let token = tokens.next().unwrap();
+            let op = match token.value {
+                TokenKind::Plus => UniOp::positive(token.loc),
+                TokenKind::Minus => UniOp::negative(token.loc),
+                TokenKind::Amp => UniOp::addr(token.loc),
+                TokenKind::Asterisk => UniOp::deref(token.loc),
                 _ => unreachable!(),
             };
             let e = parse_term(ctx, tokens)?;
