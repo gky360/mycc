@@ -185,6 +185,14 @@ impl Compiler {
                 ctx.inss.push(Ins::PUSH(Direct(RAX)));
                 Ok(())
             }
+            AstNode::UniOp {
+                op:
+                    UniOp {
+                        value: UniOpKind::Deref,
+                        ..
+                    },
+                e,
+            } => self.compile_ast(ctx, e),
             _ => Err(CompileError::lval_required(ast.loc.clone())),
         }
     }
@@ -417,11 +425,13 @@ impl Compiler {
     }
 
     fn compile_uniop(&mut self, ctx: &mut Context, uniop: &UniOp, e: &Ast) -> Result<()> {
-        self.compile_ast(ctx, e)?;
+        use Opr::*;
+        use Reg::*;
 
         match uniop.value {
-            UniOpKind::Positive => {}
+            UniOpKind::Positive => self.compile_ast(ctx, e)?,
             UniOpKind::Negative => {
+                self.compile_ast(ctx, e)?;
                 // consider -x as 0 - x
                 ctx.inss.push(Ins::POP(Opr::Direct(Reg::R10)));
                 ctx.inss
@@ -430,8 +440,15 @@ impl Compiler {
                     .push(Ins::SUB(Opr::Direct(Reg::RAX), Opr::Direct(Reg::R10)));
                 ctx.inss.push(Ins::PUSH(Opr::Direct(Reg::RAX)));
             }
-            UniOpKind::Addr => unreachable!("addr can not be compiled yet"),
-            UniOpKind::Deref => unreachable!("deref can not be compiled yet"),
+            UniOpKind::Addr => {
+                self.compile_lval(ctx, e)?;
+            }
+            UniOpKind::Deref => {
+                self.compile_ast(ctx, e)?;
+                ctx.inss.push(Ins::POP(Direct(RAX)));
+                ctx.inss.push(Ins::MOV(Direct(RAX), Indirect(RAX)));
+                ctx.inss.push(Ins::PUSH(Direct(RAX)));
+            }
         };
 
         Ok(())

@@ -164,6 +164,7 @@ pub enum AstNode {
     },
     StmtNull,
     Num(u64),
+    // TODO: Ident -> VarRef
     Ident(String),
     BinOp {
         op: BinOp,
