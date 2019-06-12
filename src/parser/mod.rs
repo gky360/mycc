@@ -411,7 +411,7 @@ where
 /// Parse tokens with following rules
 ///
 /// program     = func*
-/// func        = "int" ident "(" ("int" ident ("," "int" ident)*)? ")" (";" | block)
+/// func        = "int" ident "(" ("int" declarator ("," "int" declarator)*)? ")" (";" | block)
 /// stmt        = expr ";"
 ///             | block
 ///             | stmt_if
@@ -424,7 +424,8 @@ where
 /// stmt_while  = "while" "(" expr ")" stmt
 /// stmt_for    = "for" "(" (declaration | expr)? ";" expr? ";" expr? ")" stmt
 /// stmt_return = "return" expr ";"
-/// declaration = "int" ident ("=" assign)?
+/// declaration = "int" declarator ("=" assign)?
+/// declarator  = ("*")* ident
 /// expr        = assign
 /// assign      = equality ("=" assign)?
 /// equality    = relational ("==" relational | "!=" relational)*
@@ -476,7 +477,7 @@ where
 
 /// Parse func
 ///
-/// func        = "int" ident "(" ("int" ident ("," "int" ident)*)? ")" (";" | block)
+/// func        = "int" ident "(" ("int" declarator ("," "int" declarator)*)? ")" (";" | block)
 fn parse_func<T>(tokens: &mut Peekable<T>) -> Result<Option<Ast>>
 where
     T: Iterator<Item = Token>,
@@ -499,11 +500,10 @@ where
         if ctx.args.len() > 0 {
             consume(tokens, TokenKind::Comma)?;
         }
-        consume_type_name(tokens)?;
-        let (arg, _) = consume_ident(tokens)?;
+        let (type_name, _) = consume_type_name(tokens)?;
+        let (arg, ty, _) = parse_declarator(&mut ctx, tokens, type_name.into())?;
         // TODO: check duplicate arg name
-        // TODO: parse type
-        ctx.args.push((arg, Type::Int));
+        ctx.args.push((arg, ty));
     }
     consume(tokens, TokenKind::RParen)?;
 
@@ -696,17 +696,16 @@ where
 
 /// Parse declaration
 ///
-/// declaration = "int" ident ("=" assign)?
+/// declaration = "int" declarator ("=" assign)?
 fn parse_declaration<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
     debug!("parse_declaration --");
 
-    let (_, loc) = consume_type_name(tokens)?;
-    let (name, ident_loc) = consume_ident(tokens)?;
-    // TODO: parse type
-    if ctx.lvars.insert(name.clone(), Type::Int).is_some() {
+    let (type_name, loc) = consume_type_name(tokens)?;
+    let (name, ty, ident_loc) = parse_declarator(ctx, tokens, type_name.into())?;
+    if ctx.lvars.insert(name.clone(), ty).is_some() {
         // already declared
         return Err(ParseError::Redefinition(Token::ident(&name, ident_loc)));
     }
@@ -723,6 +722,32 @@ where
     };
 
     debug!("parse_declaration: {:?}", ret);
+    ret
+}
+
+/// Parse declarator
+///
+/// declarator  = ("*")* ident
+fn parse_declarator<T>(
+    _ctx: &mut Context,
+    tokens: &mut Peekable<T>,
+    mut ty: Type,
+) -> Result<(String, Type, Loc)>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_declarator --");
+
+    let mut loc = Loc::NONE;
+    while let Some(TokenKind::Asterisk) = tokens.peek().map(|token| &token.value) {
+        loc = loc.merge(&consume(tokens, TokenKind::Asterisk)?);
+        ty = Type::ptr(ty);
+    }
+
+    let (name, ident_loc) = consume_ident(tokens)?;
+    let ret = Ok((name, ty, loc.merge(&ident_loc)));
+
+    debug!("parse_declarator: {:?}", ret);
     ret
 }
 
