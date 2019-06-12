@@ -418,13 +418,13 @@ where
 ///             | stmt_while
 ///             | stmt_for
 ///             | stmt_return
-///             | decl ";"
+///             | declaration ";"
 /// block       = "{" stmt* "}"
 /// stmt_if     = "if" "(" expr ")" stmt ("else" stmt)?
 /// stmt_while  = "while" "(" expr ")" stmt
-/// stmt_for    = "for" "(" (decl | expr)? ";" expr? ";" expr? ")" stmt
+/// stmt_for    = "for" "(" (declaration | expr)? ";" expr? ";" expr? ")" stmt
 /// stmt_return = "return" expr ";"
-/// decl        = "int" ident ("=" assign)?
+/// declaration = "int" ident ("=" assign)?
 /// expr        = assign
 /// assign      = equality ("=" assign)?
 /// equality    = relational ("==" relational | "!=" relational)*
@@ -545,9 +545,9 @@ where
         Some(TokenKind::Keyword(Keyword::For)) => parse_stmt_for(ctx, tokens)?,
         Some(TokenKind::Keyword(Keyword::Return)) => parse_stmt_return(ctx, tokens)?,
         Some(TokenKind::TypeName(_)) => {
-            let decl = parse_decl(ctx, tokens)?;
+            let declaration = parse_declaration(ctx, tokens)?;
             let semi_loc = consume(tokens, TokenKind::Semicolon)?;
-            Ast::new(decl.value, decl.loc.merge(&semi_loc))
+            Ast::new(declaration.value, declaration.loc.merge(&semi_loc))
         }
         _ => {
             let e = parse_expr(ctx, tokens)?;
@@ -642,7 +642,7 @@ where
 
 /// Parse stmt_for
 ///
-/// stmt_for    = "for" "(" (decl | expr)? ";" expr? ";" expr? ")" stmt
+/// stmt_for    = "for" "(" (declaration | expr)? ";" expr? ";" expr? ")" stmt
 fn parse_stmt_for<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -653,7 +653,7 @@ where
     consume(tokens, TokenKind::LParen)?;
     let init = match tokens.peek().map(|token| &token.value) {
         Some(TokenKind::Semicolon) => None,
-        Some(TokenKind::TypeName(_)) => Some(parse_decl(ctx, tokens)?),
+        Some(TokenKind::TypeName(_)) => Some(parse_declaration(ctx, tokens)?),
         _ => Some(parse_expr(ctx, tokens)?),
     };
     consume(tokens, TokenKind::Semicolon)?;
@@ -694,14 +694,14 @@ where
     ret
 }
 
-/// Parse decl
+/// Parse declaration
 ///
-/// decl        = "int" ident ("=" assign)?
-fn parse_decl<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
+/// declaration = "int" ident ("=" assign)?
+fn parse_declaration<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
-    debug!("parse_decl --");
+    debug!("parse_declaration --");
 
     let (_, loc) = consume_type_name(tokens)?;
     let (name, ident_loc) = consume_ident(tokens)?;
@@ -722,7 +722,7 @@ where
         _ => Ok(Ast::stmt_null(loc.merge(&ident_loc))),
     };
 
-    debug!("parse_decl: {:?}", ret);
+    debug!("parse_declaration: {:?}", ret);
     ret
 }
 
