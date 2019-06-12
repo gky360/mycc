@@ -1,9 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt;
 
 use crate::asm::{Assembly, Ent, Function, Ins, Instructions, Label, Opr, Reg};
 use crate::lexer::{Annot, Loc};
-use crate::parser::{Ast, AstNode, BinOp, BinOpKind, UniOp, UniOpKind};
+use crate::parser::{Ast, AstNode, BinOp, BinOpKind, Type, UniOp, UniOpKind};
 
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]
@@ -68,7 +68,7 @@ impl fmt::Display for CompileError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Context {
     inss: Instructions,
-    var_offset: HashMap<String, u64>,
+    var_offset: HashMap<String, (Type, u64)>,
     ret_label: Label,
 }
 
@@ -123,8 +123,8 @@ impl Compiler {
     fn compile_func(
         &mut self,
         name: &str,
-        args: &Vec<String>,
-        lvars: &HashSet<String>,
+        args: &Vec<(String, Type)>,
+        lvars: &HashMap<String, Type>,
         body: &Ast,
     ) -> Result<Function> {
         use Opr::*;
@@ -146,17 +146,17 @@ impl Compiler {
         ctx.inss.stackpos += local_area as i32;
 
         // setup var_offset
-        for (i, arg) in args.iter().enumerate() {
+        for (i, (arg, ty)) in args.iter().enumerate() {
             let offset = 8 * (ctx.var_offset.len() + 1) as u64;
-            ctx.var_offset.insert(arg.clone(), offset);
+            ctx.var_offset.insert(arg.clone(), (ty.clone(), offset));
             ctx.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
             ctx.inss.push(Ins::SUB(Direct(RAX), Literal(offset)));
             ctx.inss
                 .push(Ins::MOV(Indirect(RAX), Direct(Self::ARG_REGS[i])));
         }
-        for lvar in lvars {
+        for (lvar, ty) in lvars {
             let offset = 8 * (ctx.var_offset.len() + 1) as u64;
-            ctx.var_offset.insert(lvar.clone(), offset);
+            ctx.var_offset.insert(lvar.clone(), (ty.clone(), offset));
         }
 
         self.compile_ast(&mut ctx, body)?;
@@ -176,15 +176,23 @@ impl Compiler {
 
         match &ast.value {
             AstNode::Ident(name) => {
-                let offset = match ctx.var_offset.get(name) {
-                    Some(offset) => *offset,
+                let (_, offset) = match ctx.var_offset.get(name) {
+                    Some(offset) => offset,
                     None => unreachable!("local variable not found"),
                 };
                 ctx.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
-                ctx.inss.push(Ins::SUB(Direct(RAX), Literal(offset)));
+                ctx.inss.push(Ins::SUB(Direct(RAX), Literal(*offset)));
                 ctx.inss.push(Ins::PUSH(Direct(RAX)));
                 Ok(())
             }
+            AstNode::UniOp {
+                op:
+                    UniOp {
+                        value: UniOpKind::Deref,
+                        ..
+                    },
+                e,
+            } => self.compile_ast(ctx, e),
             _ => Err(CompileError::lval_required(ast.loc.clone())),
         }
     }
@@ -417,11 +425,13 @@ impl Compiler {
     }
 
     fn compile_uniop(&mut self, ctx: &mut Context, uniop: &UniOp, e: &Ast) -> Result<()> {
-        self.compile_ast(ctx, e)?;
+        use Opr::*;
+        use Reg::*;
 
         match uniop.value {
-            UniOpKind::Positive => {}
+            UniOpKind::Positive => self.compile_ast(ctx, e)?,
             UniOpKind::Negative => {
+                self.compile_ast(ctx, e)?;
                 // consider -x as 0 - x
                 ctx.inss.push(Ins::POP(Opr::Direct(Reg::R10)));
                 ctx.inss
@@ -429,6 +439,15 @@ impl Compiler {
                 ctx.inss
                     .push(Ins::SUB(Opr::Direct(Reg::RAX), Opr::Direct(Reg::R10)));
                 ctx.inss.push(Ins::PUSH(Opr::Direct(Reg::RAX)));
+            }
+            UniOpKind::Addr => {
+                self.compile_lval(ctx, e)?;
+            }
+            UniOpKind::Deref => {
+                self.compile_ast(ctx, e)?;
+                ctx.inss.push(Ins::POP(Direct(RAX)));
+                ctx.inss.push(Ins::MOV(Direct(RAX), Indirect(RAX)));
+                ctx.inss.push(Ins::PUSH(Direct(RAX)));
             }
         };
 

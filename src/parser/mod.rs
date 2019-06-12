@@ -1,5 +1,5 @@
 use failure::Fail;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::fmt;
 use std::iter::Peekable;
 use std::str::FromStr;
@@ -115,6 +115,26 @@ impl fmt::Display for ParseError {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Type {
+    Int,
+    Ptr(Box<Type>),
+}
+
+impl Type {
+    fn ptr(ty: Type) -> Self {
+        Type::Ptr(Box::new(ty))
+    }
+}
+
+impl From<TypeName> for Type {
+    fn from(type_name: TypeName) -> Self {
+        match type_name {
+            TypeName::Int => Type::Int,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AstNode {
     Program {
@@ -122,8 +142,8 @@ pub enum AstNode {
     },
     Func {
         name: String,
-        args: Vec<String>,
-        lvars: HashSet<String>,
+        args: Vec<(String, Type)>,
+        lvars: HashMap<String, Type>,
         body: Box<Ast>,
     },
     Block(Vec<Ast>),
@@ -144,6 +164,7 @@ pub enum AstNode {
     },
     StmtNull,
     Num(u64),
+    // TODO: Ident -> VarRef
     Ident(String),
     BinOp {
         op: BinOp,
@@ -169,7 +190,13 @@ impl Ast {
     fn program(funcs: Vec<Ast>, loc: Loc) -> Self {
         Self::new(AstNode::Program { funcs }, loc)
     }
-    fn func(name: String, args: Vec<String>, lvars: HashSet<String>, body: Ast, loc: Loc) -> Self {
+    fn func(
+        name: String,
+        args: Vec<(String, Type)>,
+        lvars: HashMap<String, Type>,
+        body: Ast,
+        loc: Loc,
+    ) -> Self {
         Self::new(
             AstNode::Func {
                 name,
@@ -316,6 +343,8 @@ impl BinOp {
 pub enum UniOpKind {
     Positive,
     Negative,
+    Addr,
+    Deref,
 }
 
 pub type UniOp = Annot<UniOpKind>;
@@ -327,12 +356,18 @@ impl UniOp {
     fn negative(loc: Loc) -> Self {
         Self::new(UniOpKind::Negative, loc)
     }
+    fn addr(loc: Loc) -> Self {
+        Self::new(UniOpKind::Addr, loc)
+    }
+    fn deref(loc: Loc) -> Self {
+        Self::new(UniOpKind::Deref, loc)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Context {
-    args: Vec<String>,
-    lvars: HashSet<String>,
+    args: Vec<(String, Type)>,
+    lvars: HashMap<String, Type>,
 }
 
 fn consume<T>(tokens: &mut Peekable<T>, kind: TokenKind) -> Result<Loc>
@@ -385,27 +420,28 @@ where
 /// Parse tokens with following rules
 ///
 /// program     = func*
-/// func        = "int" ident "(" ("int" ident ("," "int" ident)*)? ")" (";" | block)
+/// func        = "int" ident "(" ("int" declarator ("," "int" declarator)*)? ")" (";" | block)
 /// stmt        = expr ";"
 ///             | block
 ///             | stmt_if
 ///             | stmt_while
 ///             | stmt_for
 ///             | stmt_return
-///             | decl ";"
+///             | declaration ";"
 /// block       = "{" stmt* "}"
 /// stmt_if     = "if" "(" expr ")" stmt ("else" stmt)?
 /// stmt_while  = "while" "(" expr ")" stmt
-/// stmt_for    = "for" "(" (decl | expr)? ";" expr? ";" expr? ")" stmt
+/// stmt_for    = "for" "(" (declaration | expr)? ";" expr? ";" expr? ")" stmt
 /// stmt_return = "return" expr ";"
-/// decl        = "int" ident ("=" assign)?
+/// declaration = "int" declarator ("=" assign)?
+/// declarator  = ("*")* ident
 /// expr        = assign
 /// assign      = equality ("=" assign)?
 /// equality    = relational ("==" relational | "!=" relational)*
 /// relational  = add ("<" add | "<=" add | ">" add | ">=" add)*
 /// add         = mul ("+" mul | "-" mul)*
 /// mul         = unary ("*" unary | "/" unary)*
-/// unary       = ("+" | "-")? term
+/// unary       = ("+" | "-" | "&" | "*")? term
 /// term        = num
 ///             | ident
 ///             | ident "(" (expr ("," expr)*)? ")"
@@ -450,7 +486,7 @@ where
 
 /// Parse func
 ///
-/// func        = "int" ident "(" ("int" ident ("," "int" ident)*)? ")" (";" | block)
+/// func        = "int" ident "(" ("int" declarator ("," "int" declarator)*)? ")" (";" | block)
 fn parse_func<T>(tokens: &mut Peekable<T>) -> Result<Option<Ast>>
 where
     T: Iterator<Item = Token>,
@@ -459,7 +495,7 @@ where
 
     let mut ctx = Context {
         args: Vec::new(),
-        lvars: HashSet::new(),
+        lvars: HashMap::new(),
     };
 
     let (_, loc) = consume_type_name(tokens)?;
@@ -473,10 +509,10 @@ where
         if ctx.args.len() > 0 {
             consume(tokens, TokenKind::Comma)?;
         }
-        consume_type_name(tokens)?;
-        let (arg, _) = consume_ident(tokens)?;
+        let (type_name, _) = consume_type_name(tokens)?;
+        let (arg, ty, _) = parse_declarator(&mut ctx, tokens, type_name.into())?;
         // TODO: check duplicate arg name
-        ctx.args.push(arg);
+        ctx.args.push((arg, ty));
     }
     consume(tokens, TokenKind::RParen)?;
 
@@ -518,9 +554,9 @@ where
         Some(TokenKind::Keyword(Keyword::For)) => parse_stmt_for(ctx, tokens)?,
         Some(TokenKind::Keyword(Keyword::Return)) => parse_stmt_return(ctx, tokens)?,
         Some(TokenKind::TypeName(_)) => {
-            let decl = parse_decl(ctx, tokens)?;
+            let declaration = parse_declaration(ctx, tokens)?;
             let semi_loc = consume(tokens, TokenKind::Semicolon)?;
-            Ast::new(decl.value, decl.loc.merge(&semi_loc))
+            Ast::new(declaration.value, declaration.loc.merge(&semi_loc))
         }
         _ => {
             let e = parse_expr(ctx, tokens)?;
@@ -615,7 +651,7 @@ where
 
 /// Parse stmt_for
 ///
-/// stmt_for    = "for" "(" (decl | expr)? ";" expr? ";" expr? ")" stmt
+/// stmt_for    = "for" "(" (declaration | expr)? ";" expr? ";" expr? ")" stmt
 fn parse_stmt_for<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -626,7 +662,7 @@ where
     consume(tokens, TokenKind::LParen)?;
     let init = match tokens.peek().map(|token| &token.value) {
         Some(TokenKind::Semicolon) => None,
-        Some(TokenKind::TypeName(_)) => Some(parse_decl(ctx, tokens)?),
+        Some(TokenKind::TypeName(_)) => Some(parse_declaration(ctx, tokens)?),
         _ => Some(parse_expr(ctx, tokens)?),
     };
     consume(tokens, TokenKind::Semicolon)?;
@@ -667,18 +703,18 @@ where
     ret
 }
 
-/// Parse decl
+/// Parse declaration
 ///
-/// decl        = "int" ident ("=" assign)?
-fn parse_decl<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
+/// declaration = "int" declarator ("=" assign)?
+fn parse_declaration<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
-    debug!("parse_decl --");
+    debug!("parse_declaration --");
 
-    let (_, loc) = consume_type_name(tokens)?;
-    let (name, ident_loc) = consume_ident(tokens)?;
-    if !ctx.lvars.insert(name.clone()) {
+    let (type_name, loc) = consume_type_name(tokens)?;
+    let (name, ty, ident_loc) = parse_declarator(ctx, tokens, type_name.into())?;
+    if ctx.lvars.insert(name.clone(), ty).is_some() {
         // already declared
         return Err(ParseError::Redefinition(Token::ident(&name, ident_loc)));
     }
@@ -694,7 +730,33 @@ where
         _ => Ok(Ast::stmt_null(loc.merge(&ident_loc))),
     };
 
-    debug!("parse_decl: {:?}", ret);
+    debug!("parse_declaration: {:?}", ret);
+    ret
+}
+
+/// Parse declarator
+///
+/// declarator  = ("*")* ident
+fn parse_declarator<T>(
+    _ctx: &mut Context,
+    tokens: &mut Peekable<T>,
+    mut ty: Type,
+) -> Result<(String, Type, Loc)>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_declarator --");
+
+    let mut loc = Loc::NONE;
+    while let Some(TokenKind::Asterisk) = tokens.peek().map(|token| &token.value) {
+        loc = loc.merge(&consume(tokens, TokenKind::Asterisk)?);
+        ty = Type::ptr(ty);
+    }
+
+    let (name, ident_loc) = consume_ident(tokens)?;
+    let ret = Ok((name, ty, loc.merge(&ident_loc)));
+
+    debug!("parse_declarator: {:?}", ret);
     ret
 }
 
@@ -853,7 +915,7 @@ where
 
 /// Parse unary
 ///
-/// unary       = ("+" | "-")? term
+/// unary       = ("+" | "-" | "&" | "*")? term
 fn parse_unary<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -861,16 +923,16 @@ where
     debug!("parse_unary --");
 
     let ret = match tokens.peek().map(|token| &token.value) {
-        Some(TokenKind::Plus) | Some(TokenKind::Minus) => {
-            let op = match tokens.next().unwrap() {
-                Token {
-                    value: TokenKind::Plus,
-                    loc,
-                } => UniOp::positive(loc),
-                Token {
-                    value: TokenKind::Minus,
-                    loc,
-                } => UniOp::negative(loc),
+        Some(TokenKind::Plus)
+        | Some(TokenKind::Minus)
+        | Some(TokenKind::Amp)
+        | Some(TokenKind::Asterisk) => {
+            let token = tokens.next().unwrap();
+            let op = match token.value {
+                TokenKind::Plus => UniOp::positive(token.loc),
+                TokenKind::Minus => UniOp::negative(token.loc),
+                TokenKind::Amp => UniOp::addr(token.loc),
+                TokenKind::Asterisk => UniOp::deref(token.loc),
                 _ => unreachable!(),
             };
             let e = parse_term(ctx, tokens)?;
@@ -917,7 +979,9 @@ where
             }
             _ => {
                 // TODO: support env
-                if ctx.args.contains(&name) || ctx.lvars.contains(&name) {
+                if ctx.args.iter().find(|&(item, _)| item == &name).is_some()
+                    || ctx.lvars.get(&name).is_some()
+                {
                     Ok(Ast::ident(name, token.loc))
                 } else {
                     Err(ParseError::Undeclared(Token::ident(&name, token.loc)))

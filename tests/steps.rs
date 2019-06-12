@@ -214,3 +214,12 @@ fn step_15_declare_func() {
         assert_exit_status("step_15/valid/variable_as_arg.c", &[], &[], 2);
     });
 }
+
+#[test]
+#[cfg_attr(tarpaulin, skip)]
+fn step_17_pointer() {
+    run_test(|| {
+        assert_exit_status("step_17/valid/pointer_01.c", &[], &[], 3);
+        assert_exit_status("step_17/valid/pointer_02.c", &[], &[], 3);
+    });
+}
