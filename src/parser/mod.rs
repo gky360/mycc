@@ -4,7 +4,7 @@ use std::fmt;
 use std::iter::Peekable;
 use std::str::FromStr;
 
-use super::lexer::{Annot, Keyword, LexError, Lexer, Loc, Token, TokenKind, TypeName};
+use super::lexer::{Keyword, LexError, Lexer, Loc, Token, TokenKind, TypeName};
 
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]
@@ -111,6 +111,23 @@ impl fmt::Display for ParseError {
             Redefinition(token) => write!(f, "{}: redefinition of '{}'", token.loc, token.value),
             Undeclared(token) => write!(f, "{}: '{}' undeclared", token.loc, token.value),
             Eof => write!(f, "unexpected end of file"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Annot<T> {
+    pub value: T,
+    pub ty: Option<Type>,
+    pub loc: Loc,
+}
+
+impl<T> Annot<T> {
+    pub fn new(value: T, loc: Loc) -> Self {
+        Self {
+            value,
+            ty: None,
+            loc,
         }
     }
 }
