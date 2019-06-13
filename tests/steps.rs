@@ -4,7 +4,7 @@ extern crate log;
 use std::process::Command;
 use tempdir::TempDir;
 
-use helpers::{assert_exit_status, assert_output, run_test};
+use helpers::{assert_exit_status, assert_output, run_test, temp_file_name};
 
 #[cfg_attr(tarpaulin, skip)]
 mod helpers;
@@ -140,12 +140,6 @@ fn step_13_compound_statement() {
 #[cfg_attr(tarpaulin, skip)]
 fn step_14_call_func() {
     run_test(|| {
-        fn temp_file_name(tmp_dir: &TempDir, name: &str) -> String {
-            let file_path = tmp_dir.path().join(name);
-            let file_name = file_path.to_str().expect("failed to get tempdir path");
-            String::from(file_name)
-        }
-
         // compile foo.c and foo_x_y.c
         let tmp_dir = TempDir::new("mycc").expect("failed to create temp dir");
         for name in &["foo", "foo_x_y"] {
@@ -221,5 +215,37 @@ fn step_17_pointer() {
     run_test(|| {
         assert_exit_status("step_17/valid/pointer_01.c", &[], &[], 3);
         assert_exit_status("step_17/valid/pointer_02.c", &[], &[], 3);
+    });
+}
+
+#[test]
+#[cfg_attr(tarpaulin, skip)]
+fn step_18_pointer_arithmetic() {
+    run_test(|| {
+        // compile helper source code
+        let tmp_dir = TempDir::new("mycc").expect("failed to create temp dir");
+        let output = Command::new("gcc")
+            .args(&[
+                "-o",
+                &temp_file_name(&tmp_dir, "alloc4.o"),
+                "-c",
+                "testdata/step_18/alloc4.c",
+            ])
+            .output()
+            .expect("failed to compile func declaration");
+        if !output.status.success() {
+            eprintln!(
+                "{}",
+                String::from_utf8(output.stderr).expect("failed to output gcc error")
+            );
+            panic!("gcc exited with failure");
+        }
+
+        assert_exit_status(
+            "step_18/valid/pointer_arithmetic_01.c",
+            &[&temp_file_name(&tmp_dir, "alloc4.o")],
+            &[],
+            4,
+        );
     });
 }

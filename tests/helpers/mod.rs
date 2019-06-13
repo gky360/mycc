@@ -23,6 +23,12 @@ fn setup() {
 
 fn teardown() {}
 
+pub fn temp_file_name(tmp_dir: &TempDir, name: &str) -> String {
+    let file_path = tmp_dir.path().join(name);
+    let file_name = file_path.to_str().expect("failed to get tempdir path");
+    String::from(file_name)
+}
+
 fn testdata_path(name: &str) -> PathBuf {
     PathBuf::from("testdata").join(name)
 }
