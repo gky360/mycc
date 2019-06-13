@@ -118,16 +118,16 @@ impl fmt::Display for ParseError {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Annot<T> {
     pub value: T,
-    pub ty: Option<Type>,
     pub loc: Loc,
+    pub ty: Option<Type>,
 }
 
 impl<T> Annot<T> {
     pub fn new(value: T, loc: Loc) -> Self {
         Self {
             value,
-            ty: None,
             loc,
+            ty: None,
         }
     }
 }
@@ -181,8 +181,10 @@ pub enum AstNode {
     },
     StmtNull,
     Num(u64),
-    // TODO: Ident -> VarRef
-    Ident(String),
+    VarRef {
+        name: String,
+        ty: Type,
+    },
     BinOp {
         op: BinOp,
         l: Box<Ast>,
@@ -267,11 +269,10 @@ impl Ast {
         Self::new(AstNode::StmtNull, loc)
     }
     fn num(n: u64, loc: Loc) -> Self {
-        // call Annot::new
         Self::new(AstNode::Num(n), loc)
     }
-    fn ident(name: String, loc: Loc) -> Self {
-        Self::new(AstNode::Ident(name), loc)
+    fn var_ref(name: String, ty: Type, loc: Loc) -> Self {
+        Self::new(AstNode::VarRef { name, ty }, loc)
     }
     fn binop(op: BinOp, l: Ast, r: Ast, loc: Loc) -> Self {
         Self::new(
@@ -731,7 +732,7 @@ where
 
     let (type_name, loc) = consume_type_name(tokens)?;
     let (name, ty, ident_loc) = parse_declarator(ctx, tokens, type_name.into())?;
-    if ctx.lvars.insert(name.clone(), ty).is_some() {
+    if ctx.lvars.insert(name.clone(), ty.clone()).is_some() {
         // already declared
         return Err(ParseError::Redefinition(Token::ident(&name, ident_loc)));
     }
@@ -739,7 +740,7 @@ where
     let ret = match tokens.peek().map(|token| &token.value) {
         Some(TokenKind::Assign) => {
             let op = BinOp::assign(consume(tokens, TokenKind::Assign)?);
-            let e = Ast::ident(name, ident_loc);
+            let e = Ast::var_ref(name, ty, ident_loc);
             let r = parse_assign(ctx, tokens)?;
             let loc = loc.merge(&r.loc);
             Ok(Ast::binop(op, e, r, loc))
@@ -996,13 +997,20 @@ where
             }
             _ => {
                 // TODO: support env
-                if ctx.args.iter().find(|&(item, _)| item == &name).is_some()
-                    || ctx.lvars.get(&name).is_some()
-                {
-                    Ok(Ast::ident(name, token.loc))
-                } else {
-                    Err(ParseError::Undeclared(Token::ident(&name, token.loc)))
-                }
+                let ty = match ctx.lvars.get(&name) {
+                    Some(ty) => Ok(ty),
+                    _ => ctx
+                        .args
+                        .iter()
+                        .find(|&(item, _)| item == &name)
+                        .map(|(_, ty)| ty)
+                        .ok_or(ParseError::Undeclared(Token::ident(
+                            &name,
+                            token.loc.clone(),
+                        ))),
+                }?;
+
+                Ok(Ast::var_ref(name, ty.clone(), token.loc))
             }
         },
         TokenKind::LParen => {

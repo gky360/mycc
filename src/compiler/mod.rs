@@ -175,7 +175,7 @@ impl Compiler {
         use Reg::*;
 
         match &ast.value {
-            AstNode::Ident(name) => {
+            AstNode::VarRef { name, .. } => {
                 let (_, offset) = match ctx.var_offset.get(name) {
                     Some(offset) => offset,
                     None => unreachable!("local variable not found"),
@@ -220,7 +220,7 @@ impl Compiler {
                 Ok(())
             }
             AstNode::Num(num) => self.compile_num(ctx, num),
-            AstNode::Ident(_) => self.compile_ident(ctx, ast),
+            AstNode::VarRef { .. } => self.compile_var_ref(ctx, ast),
             AstNode::BinOp {
                 ref op,
                 ref l,
@@ -358,7 +358,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_ident(&mut self, ctx: &mut Context, ast: &Ast) -> Result<()> {
+    fn compile_var_ref(&mut self, ctx: &mut Context, ast: &Ast) -> Result<()> {
         use Opr::*;
         use Reg::*;
 
