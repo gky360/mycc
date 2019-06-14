@@ -13,6 +13,10 @@ use crate::compiler::{CompileError, Compiler};
 use crate::parser::ParseError;
 use crate::sema::{analyze, SemanticError};
 
+#[cfg(test)]
+#[cfg_attr(tarpaulin, skip)]
+pub mod tests;
+
 pub mod asm;
 pub mod compiler;
 pub mod lexer;
