@@ -4,7 +4,7 @@ use std::fmt;
 use std::iter::Peekable;
 use std::str::FromStr;
 
-use super::lexer::{Annot, Keyword, LexError, Lexer, Loc, Token, TokenKind, TypeName};
+use super::lexer::{Keyword, LexError, Lexer, Loc, Token, TokenKind, TypeName};
 
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]
@@ -116,14 +116,56 @@ impl fmt::Display for ParseError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Annot<T> {
+    pub value: T,
+    pub loc: Loc,
+    pub ty: Option<Type>,
+}
+
+impl<T> Annot<T> {
+    pub fn new(value: T, loc: Loc) -> Self {
+        Self {
+            value,
+            loc,
+            ty: None,
+        }
+    }
+    pub fn new_with_type(value: T, loc: Loc, ty: Type) -> Self {
+        Self {
+            value,
+            loc,
+            ty: Some(ty),
+        }
+    }
+
+    pub fn get_type(&self) -> &Type {
+        self.ty.as_ref().expect("could not get type")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Int,
     Ptr(Box<Type>),
 }
 
 impl Type {
-    fn ptr(ty: Type) -> Self {
+    pub fn ptr(ty: Type) -> Self {
         Type::Ptr(Box::new(ty))
+    }
+
+    pub fn size(&self) -> u64 {
+        match self {
+            Type::Int => 4,
+            Type::Ptr(_) => 8,
+        }
+    }
+
+    pub fn is_ptr(&self) -> bool {
+        match self {
+            Type::Ptr(_) => true,
+            _ => false,
+        }
     }
 }
 
@@ -131,6 +173,15 @@ impl From<TypeName> for Type {
     fn from(type_name: TypeName) -> Self {
         match type_name {
             TypeName::Int => Type::Int,
+        }
+    }
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Type::Int => write!(f, "int"),
+            Type::Ptr(ty) => write!(f, "*{}", ty),
         }
     }
 }
@@ -143,6 +194,7 @@ pub enum AstNode {
     Func {
         name: String,
         args: Vec<(String, Type)>,
+        /// local variables including function arguments
         lvars: HashMap<String, Type>,
         body: Box<Ast>,
     },
@@ -164,8 +216,9 @@ pub enum AstNode {
     },
     StmtNull,
     Num(u64),
-    // TODO: Ident -> VarRef
-    Ident(String),
+    VarRef {
+        name: String,
+    },
     BinOp {
         op: BinOp,
         l: Box<Ast>,
@@ -250,11 +303,10 @@ impl Ast {
         Self::new(AstNode::StmtNull, loc)
     }
     fn num(n: u64, loc: Loc) -> Self {
-        // call Annot::new
-        Self::new(AstNode::Num(n), loc)
+        Self::new_with_type(AstNode::Num(n), loc, Type::Int)
     }
-    fn ident(name: String, loc: Loc) -> Self {
-        Self::new(AstNode::Ident(name), loc)
+    fn var_ref(name: String, ty: Type, loc: Loc) -> Self {
+        Self::new_with_type(AstNode::VarRef { name }, loc, ty)
     }
     fn binop(op: BinOp, l: Ast, r: Ast, loc: Loc) -> Self {
         Self::new(
@@ -510,9 +562,11 @@ where
             consume(tokens, TokenKind::Comma)?;
         }
         let (type_name, _) = consume_type_name(tokens)?;
-        let (arg, ty, _) = parse_declarator(&mut ctx, tokens, type_name.into())?;
-        // TODO: check duplicate arg name
-        ctx.args.push((arg, ty));
+        let (arg, ty, d_loc) = parse_declarator(&mut ctx, tokens, type_name.into())?;
+        ctx.args.push((arg.clone(), ty.clone()));
+        if ctx.lvars.insert(arg.clone(), ty).is_some() {
+            return Err(ParseError::Redefinition(Token::ident(&arg, d_loc)));
+        }
     }
     consume(tokens, TokenKind::RParen)?;
 
@@ -714,7 +768,7 @@ where
 
     let (type_name, loc) = consume_type_name(tokens)?;
     let (name, ty, ident_loc) = parse_declarator(ctx, tokens, type_name.into())?;
-    if ctx.lvars.insert(name.clone(), ty).is_some() {
+    if ctx.lvars.insert(name.clone(), ty.clone()).is_some() {
         // already declared
         return Err(ParseError::Redefinition(Token::ident(&name, ident_loc)));
     }
@@ -722,7 +776,7 @@ where
     let ret = match tokens.peek().map(|token| &token.value) {
         Some(TokenKind::Assign) => {
             let op = BinOp::assign(consume(tokens, TokenKind::Assign)?);
-            let e = Ast::ident(name, ident_loc);
+            let e = Ast::var_ref(name, ty, ident_loc);
             let r = parse_assign(ctx, tokens)?;
             let loc = loc.merge(&r.loc);
             Ok(Ast::binop(op, e, r, loc))
@@ -963,6 +1017,8 @@ where
         TokenKind::Number(n) => Ok(Ast::num(n, token.loc)),
         TokenKind::Ident(name) => match tokens.peek().map(|token| &token.value) {
             Some(TokenKind::LParen) => {
+                // function call
+
                 consume(tokens, TokenKind::LParen)?;
                 let mut args = Vec::new();
                 loop {
@@ -979,13 +1035,17 @@ where
             }
             _ => {
                 // TODO: support env
-                if ctx.args.iter().find(|&(item, _)| item == &name).is_some()
-                    || ctx.lvars.get(&name).is_some()
-                {
-                    Ok(Ast::ident(name, token.loc))
-                } else {
-                    Err(ParseError::Undeclared(Token::ident(&name, token.loc)))
-                }
+                let ty = match ctx.lvars.get(&name) {
+                    Some(ty) => ty,
+                    None => {
+                        return Err(ParseError::Undeclared(Token::ident(
+                            &name,
+                            token.loc.clone(),
+                        )))
+                    }
+                };
+
+                Ok(Ast::var_ref(name, ty.clone(), token.loc))
             }
         },
         TokenKind::LParen => {

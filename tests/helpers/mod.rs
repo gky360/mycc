@@ -23,8 +23,24 @@ fn setup() {
 
 fn teardown() {}
 
+pub fn temp_file_name(tmp_dir: &TempDir, name: &str) -> String {
+    let file_path = tmp_dir.path().join(name);
+    let file_name = file_path.to_str().expect("failed to get tempdir path");
+    String::from(file_name)
+}
+
 fn testdata_path(name: &str) -> PathBuf {
     PathBuf::from("testdata").join(name)
+}
+
+fn run(tmp_dir: &TempDir, testdata_name: &str) -> mycc::Result<PathBuf> {
+    let opt = {
+        let input = testdata_path(testdata_name);
+        let output = tmp_dir.path().join("a.s");
+        mycc::Opt { input, output }
+    };
+    mycc::run(&opt)?;
+    Ok(opt.output)
 }
 
 fn compile(asm_path: &Path, exec_path: &Path, compile_args: &[&str]) -> io::Result<Output> {
@@ -44,18 +60,15 @@ fn exec(exec_path: &Path, exec_args: &[&str]) -> io::Result<Output> {
 
 fn compile_and_exec(testdata_name: &str, compile_args: &[&str], exec_args: &[&str]) -> Output {
     let tmp_dir = TempDir::new("mycc").expect("failed to create temp dir");
-    let exec_path = tmp_dir.path().join("a.out");
-    let opt = {
-        let input = testdata_path(testdata_name);
-        let output = tmp_dir.path().join("a.s");
-        mycc::Opt { input, output }
-    };
     debug!("tmp_dir: {:?}", tmp_dir);
+
+    let asm_path =
+        run(&tmp_dir, testdata_name).expect(&format!("failed to run mycc for {}", testdata_name));
+
+    let exec_path = tmp_dir.path().join("a.out");
     debug!("exec_path: {:?}", exec_path);
 
-    mycc::run(&opt).expect(&format!("failed to run mycc for {}", testdata_name));
-
-    let compile_output = compile(&opt.output, &exec_path, compile_args).expect("failed to compile");
+    let compile_output = compile(&asm_path, &exec_path, compile_args).expect("failed to compile");
     debug!("compile_output: {:?}", compile_output);
     if !compile_output.status.success() {
         eprintln!(

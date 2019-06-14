@@ -11,11 +11,17 @@ use structopt::StructOpt;
 
 use crate::compiler::{CompileError, Compiler};
 use crate::parser::ParseError;
+use crate::sema::{analyze, SemanticError};
+
+#[cfg(test)]
+#[cfg_attr(tarpaulin, skip)]
+pub mod tests;
 
 pub mod asm;
 pub mod compiler;
 pub mod lexer;
 pub mod parser;
+pub mod sema;
 
 pub type Result<T> = result::Result<T, Error>;
 
@@ -25,6 +31,8 @@ pub enum Error {
     Io(#[fail(cause)] io::Error),
     #[fail(display = "ParseError")]
     Parse(#[fail(cause)] ParseError),
+    #[fail(display = "SemanticError")]
+    Semantic(#[fail(cause)] SemanticError),
     #[fail(display = "CompileError")]
     Compile(#[fail(cause)] CompileError),
     #[fail(display = "Unknown Error")]
@@ -55,6 +63,12 @@ impl From<ParseError> for Error {
     }
 }
 
+impl From<SemanticError> for Error {
+    fn from(err: SemanticError) -> Error {
+        Error::Semantic(err)
+    }
+}
+
 impl From<CompileError> for Error {
     fn from(err: CompileError) -> Error {
         Error::Compile(err)
@@ -78,7 +92,13 @@ fn run_inner(opt: &Opt) -> Result<()> {
     let source = fs::read_to_string(&opt.input)?;
 
     // parse to generate AST
-    let ast = source.parse().map_err(|err: ParseError| {
+    let mut ast = source.parse().map_err(|err: ParseError| {
+        err.show_diagnostic(&source);
+        err
+    })?;
+
+    // analyze semantics
+    analyze(&mut ast).map_err(|err| {
         err.show_diagnostic(&source);
         err
     })?;

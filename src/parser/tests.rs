@@ -1,18 +1,9 @@
-use std::fs;
-use std::path::PathBuf;
-
 use super::*;
-
-fn testdata_path(name: &str) -> PathBuf {
-    PathBuf::from("testdata").join(name)
-}
-
-fn load_source(name: &str) -> std::io::Result<String> {
-    fs::read_to_string(testdata_path(name))
-}
+use crate::tests::load_source;
+use crate::Error;
 
 fn assert_parse_error(name: &str) {
-    let source = load_source(name).expect("failed to load test source file");
+    let source = load_source(name);
     match Ast::from_str(&source) {
         Ok(_) => assert!(false, "parser returned no error: {}", name),
         Err(err) => {
@@ -20,6 +11,7 @@ fn assert_parse_error(name: &str) {
             if let ParseError::Lex(_) = err {
                 assert!(false, "lexer returned error: {}", name);
             }
+            Error::from(err).show_trace();
             assert!(true);
         }
     }
@@ -37,7 +29,7 @@ fn step_06_relational_operator() {
 
 #[test]
 fn step_09_single_char_variable() {
-    let names = &["step_09/invalid/syntax_err_no_semicolon.c"];
+    let names = &["step_09/parse_err/syntax_err_no_semicolon.c"];
     names.iter().for_each(|name| assert_parse_error(name))
 }
 

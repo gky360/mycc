@@ -5,15 +5,10 @@ use crate::asm::{Assembly, Ent, Function, Ins, Instructions, Label, Opr, Reg};
 use crate::lexer::{Annot, Loc};
 use crate::parser::{Ast, AstNode, BinOp, BinOpKind, Type, UniOp, UniOpKind};
 
-#[cfg(test)]
-#[cfg_attr(tarpaulin, skip)]
-mod tests;
-
 pub type Result<T> = std::result::Result<T, CompileError>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CompileErrorKind {
-    LValRequired,
     NotImplemented,
 }
 
@@ -23,10 +18,6 @@ pub struct CompileError(Annot<CompileErrorKind>);
 impl CompileError {
     fn new(kind: CompileErrorKind, loc: Loc) -> Self {
         CompileError(Annot::new(kind, loc))
-    }
-
-    fn lval_required(loc: Loc) -> Self {
-        CompileError::new(CompileErrorKind::LValRequired, loc)
     }
 
     #[allow(dead_code)]
@@ -51,11 +42,6 @@ impl fmt::Display for CompileError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::CompileErrorKind::*;
         match self.0.value {
-            LValRequired => write!(
-                f,
-                "{}: lvalue required as left operand of assignment",
-                self.0.loc
-            ),
             NotImplemented => write!(
                 f,
                 "{}: compiler is not implemented for this syntax",
@@ -141,22 +127,26 @@ impl Compiler {
         ctx.inss.push(Ins::PUSH(Direct(RBP)));
         ctx.inss.push(Ins::MOV(Direct(RBP), Direct(RSP)));
 
-        let local_area = 8 * (args.len() + lvars.len()) as u64;
+        let local_area = 8 * (lvars.len()) as u64;
         ctx.inss.push(Ins::SUB(Direct(RSP), Literal(local_area)));
         ctx.inss.stackpos += local_area as i32;
 
         // setup var_offset
-        for (i, (arg, ty)) in args.iter().enumerate() {
-            let offset = 8 * (ctx.var_offset.len() + 1) as u64;
-            ctx.var_offset.insert(arg.clone(), (ty.clone(), offset));
-            ctx.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
-            ctx.inss.push(Ins::SUB(Direct(RAX), Literal(offset)));
-            ctx.inss
-                .push(Ins::MOV(Indirect(RAX), Direct(Self::ARG_REGS[i])));
-        }
         for (lvar, ty) in lvars {
             let offset = 8 * (ctx.var_offset.len() + 1) as u64;
             ctx.var_offset.insert(lvar.clone(), (ty.clone(), offset));
+        }
+
+        // copy args from reigsters into stack
+        for (i, (arg, _ty)) in args.iter().enumerate() {
+            let (_ty, offset) = ctx
+                .var_offset
+                .get(arg)
+                .expect(&format!("arg not found in local variable list: {}", arg));
+            ctx.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
+            ctx.inss.push(Ins::SUB(Direct(RAX), Literal(*offset)));
+            ctx.inss
+                .push(Ins::MOV(Indirect(RAX), Direct(Self::ARG_REGS[i])));
         }
 
         self.compile_ast(&mut ctx, body)?;
@@ -175,7 +165,7 @@ impl Compiler {
         use Reg::*;
 
         match &ast.value {
-            AstNode::Ident(name) => {
+            AstNode::VarRef { name, .. } => {
                 let (_, offset) = match ctx.var_offset.get(name) {
                     Some(offset) => offset,
                     None => unreachable!("local variable not found"),
@@ -193,7 +183,7 @@ impl Compiler {
                     },
                 e,
             } => self.compile_ast(ctx, e),
-            _ => Err(CompileError::lval_required(ast.loc.clone())),
+            _ => unreachable!("lval required"),
         }
     }
 
@@ -220,7 +210,7 @@ impl Compiler {
                 Ok(())
             }
             AstNode::Num(num) => self.compile_num(ctx, num),
-            AstNode::Ident(_) => self.compile_ident(ctx, ast),
+            AstNode::VarRef { .. } => self.compile_var_ref(ctx, ast),
             AstNode::BinOp {
                 ref op,
                 ref l,
@@ -358,7 +348,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_ident(&mut self, ctx: &mut Context, ast: &Ast) -> Result<()> {
+    fn compile_var_ref(&mut self, ctx: &mut Context, ast: &Ast) -> Result<()> {
         use Opr::*;
         use Reg::*;
 
