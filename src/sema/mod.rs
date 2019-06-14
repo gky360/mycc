@@ -184,9 +184,16 @@ fn walk(ast: &mut Ast) -> Result<()> {
             }
             UniOpKind::Deref => {
                 walk(e)?;
-                if !e.get_type().is_ptr() {
-                    return Err(SemanticError::unexpected_type(e.get_type(), &e.loc));
-                }
+                match e.get_type() {
+                    Type::Ptr(ty) => ast.ty = Some((ty as &Type).clone()),
+                    _ => return Err(SemanticError::unexpected_type(e.get_type(), &e.loc)),
+                };
+            }
+            UniOpKind::Sizeof => {
+                walk(e)?;
+                eprintln!("{:?}", e);
+                ast.value = AstNode::Num(e.get_type().size());
+                ast.ty = Some(Type::Int);
             }
             _ => {
                 walk(e)?;

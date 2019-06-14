@@ -439,6 +439,7 @@ impl Compiler {
                 ctx.inss.push(Ins::MOV(Direct(RAX), Indirect(RAX)));
                 ctx.inss.push(Ins::PUSH(Direct(RAX)));
             }
+            UniOpKind::Sizeof => unreachable!(),
         };
 
         Ok(())

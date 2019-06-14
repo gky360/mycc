@@ -160,13 +160,6 @@ impl Type {
             Type::Ptr(_) => 8,
         }
     }
-
-    pub fn is_ptr(&self) -> bool {
-        match self {
-            Type::Ptr(_) => true,
-            _ => false,
-        }
-    }
 }
 
 impl From<TypeName> for Type {
@@ -397,6 +390,7 @@ pub enum UniOpKind {
     Negative,
     Addr,
     Deref,
+    Sizeof,
 }
 
 pub type UniOp = Annot<UniOpKind>;
@@ -413,6 +407,9 @@ impl UniOp {
     }
     fn deref(loc: Loc) -> Self {
         Self::new(UniOpKind::Deref, loc)
+    }
+    fn sizeof(loc: Loc) -> Self {
+        Self::new(UniOpKind::Sizeof, loc)
     }
 }
 
@@ -493,7 +490,8 @@ where
 /// relational  = add ("<" add | "<=" add | ">" add | ">=" add)*
 /// add         = mul ("+" mul | "-" mul)*
 /// mul         = unary ("*" unary | "/" unary)*
-/// unary       = ("+" | "-" | "&" | "*")? term
+/// unary       = "sizeof" unary
+///             | ("+" | "-" | "&" | "*")? term
 /// term        = num
 ///             | ident
 ///             | ident "(" (expr ("," expr)*)? ")"
@@ -969,7 +967,8 @@ where
 
 /// Parse unary
 ///
-/// unary       = ("+" | "-" | "&" | "*")? term
+/// unary       = "sizeof" unary
+///             | ("+" | "-" | "&" | "*")? term
 fn parse_unary<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -977,6 +976,12 @@ where
     debug!("parse_unary --");
 
     let ret = match tokens.peek().map(|token| &token.value) {
+        Some(TokenKind::Keyword(Keyword::Sizeof)) => {
+            let sizeof_loc = consume(tokens, TokenKind::Keyword(Keyword::Sizeof))?;
+            let e = parse_unary(ctx, tokens)?;
+            let loc = sizeof_loc.merge(&e.loc);
+            Ok(Ast::uniop(UniOp::sizeof(sizeof_loc), e, loc))
+        }
         Some(TokenKind::Plus)
         | Some(TokenKind::Minus)
         | Some(TokenKind::Amp)
