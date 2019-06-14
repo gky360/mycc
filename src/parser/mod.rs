@@ -150,7 +150,7 @@ pub enum Type {
 }
 
 impl Type {
-    fn ptr(ty: Type) -> Self {
+    pub fn ptr(ty: Type) -> Self {
         Type::Ptr(Box::new(ty))
     }
 
@@ -173,6 +173,15 @@ impl From<TypeName> for Type {
     fn from(type_name: TypeName) -> Self {
         match type_name {
             TypeName::Int => Type::Int,
+        }
+    }
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Type::Int => write!(f, "int"),
+            Type::Ptr(ty) => write!(f, "*{}", ty),
         }
     }
 }

@@ -12,7 +12,7 @@ pub type Result<T> = std::result::Result<T, SemanticError>;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SemanticErrorKind {
     LValRequired,
-    NotAnInteger,
+    UnexpectedType(Type),
 }
 
 #[derive(Fail, Debug, Clone, PartialEq, Eq, Hash)]
@@ -23,11 +23,11 @@ impl SemanticError {
         SemanticError(Annot::new(kind, loc))
     }
 
-    fn lval_required(loc: Loc) -> Self {
-        SemanticError::new(SemanticErrorKind::LValRequired, loc)
+    fn lval_required(loc: &Loc) -> Self {
+        SemanticError::new(SemanticErrorKind::LValRequired, loc.clone())
     }
-    fn not_an_integer(loc: Loc) -> Self {
-        SemanticError::new(SemanticErrorKind::NotAnInteger, loc)
+    fn unexpected_type(ty: &Type, loc: &Loc) -> Self {
+        SemanticError::new(SemanticErrorKind::UnexpectedType(ty.clone()), loc.clone())
     }
 
     pub fn loc(&self) -> &Loc {
@@ -46,13 +46,13 @@ impl SemanticError {
 impl fmt::Display for SemanticError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::SemanticErrorKind::*;
-        match self.0.value {
+        match &self.0.value {
             LValRequired => write!(
                 f,
                 "{}: lvalue required as left operand of assignment",
                 self.0.loc
             ),
-            NotAnInteger => write!(f, "{}: not an integer", self.0.loc),
+            UnexpectedType(ty) => write!(f, "{}: unexpected type: {}", self.0.loc, ty),
         }
     }
 }
@@ -177,7 +177,17 @@ fn walk(ast: &mut Ast) -> Result<()> {
             }
         },
         UniOp { ref op, ref mut e } => match op.value {
-            // TODO: support addr and deref
+            UniOpKind::Addr => {
+                walk(e)?;
+                check_lval(e)?;
+                ast.ty = Some(Type::ptr(e.get_type().clone()));
+            }
+            UniOpKind::Deref => {
+                walk(e)?;
+                if !e.get_type().is_ptr() {
+                    return Err(SemanticError::unexpected_type(e.get_type(), &ast.loc));
+                }
+            }
             _ => {
                 walk(e)?;
                 check_int(e)?;
@@ -207,14 +217,14 @@ fn check_lval(ast: &Ast) -> Result<()> {
             },
             ..
         } => Ok(()),
-        _ => Err(SemanticError::lval_required(ast.loc.clone())),
+        _ => Err(SemanticError::lval_required(&ast.loc)),
     }
 }
 
 fn check_int(ast: &Ast) -> Result<()> {
-    match ast.ty {
-        Some(Type::Int) => Ok(()),
-        _ => Err(SemanticError::not_an_integer(ast.loc.clone())),
+    match ast.get_type() {
+        Type::Int => Ok(()),
+        ty => Err(SemanticError::unexpected_type(ty, &ast.loc)),
     }
 }
 

@@ -14,7 +14,7 @@ int main() {
     let mut ast = Ast::from_str(source).unwrap();
     assert_eq!(
         analyze(&mut ast),
-        Err(SemanticError::lval_required(Loc(33, 38)))
+        Err(SemanticError::lval_required(&Loc(33, 38)))
     );
 
     let source = r##"
@@ -27,6 +27,6 @@ int main() {
     let mut ast = Ast::from_str(source).unwrap();
     assert_eq!(
         analyze(&mut ast),
-        Err(SemanticError::lval_required(Loc(33, 35)))
+        Err(SemanticError::lval_required(&Loc(33, 35)))
     );
 }
