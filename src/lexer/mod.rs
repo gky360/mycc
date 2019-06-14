@@ -124,6 +124,8 @@ pub enum Keyword {
     Return,
     #[strum(serialize = "while")]
     While,
+    #[strum(serialize = "sizeof")]
+    Sizeof,
 }
 
 #[derive(Display, EnumString, Debug, Copy, Clone, PartialEq, Eq, Hash)]
