@@ -24,9 +24,24 @@ fn run(testdata_name: &str) -> Result<()> {
 
 #[test]
 fn parse_error() {
-    match run("step_06/invalid/missing_first_op.c") {
-        Err(Error::Parse(_)) => assert!(true),
-        Err(err) => assert!(false, "got unexpected error: {}", err),
-        Ok(()) => assert!(false, "got no error"),
+    let names = &["step_06/invalid/missing_first_op.c"];
+    for name in names {
+        match run(name) {
+            Err(Error::Parse(_)) => assert!(true),
+            Err(err) => assert!(false, "got unexpected error: {}", err),
+            Ok(()) => assert!(false, "got no error"),
+        }
+    }
+}
+
+#[test]
+fn sema_error() {
+    let names = &["step_09/sema_err/invalid_lval_1.c"];
+    for name in names {
+        match run(name) {
+            Err(Error::Semantic(_)) => assert!(true),
+            Err(err) => assert!(false, "got unexpected error: {}", err),
+            Ok(()) => assert!(false, "got no error"),
+        }
     }
 }

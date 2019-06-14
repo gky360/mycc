@@ -1,5 +1,6 @@
 use super::*;
 use crate::tests::load_source;
+use crate::Error;
 
 fn assert_parse_error(name: &str) {
     let source = load_source(name);
@@ -10,6 +11,7 @@ fn assert_parse_error(name: &str) {
             if let ParseError::Lex(_) = err {
                 assert!(false, "lexer returned error: {}", name);
             }
+            Error::from(err).show_trace();
             assert!(true);
         }
     }

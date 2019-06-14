@@ -185,7 +185,7 @@ fn walk(ast: &mut Ast) -> Result<()> {
             UniOpKind::Deref => {
                 walk(e)?;
                 if !e.get_type().is_ptr() {
-                    return Err(SemanticError::unexpected_type(e.get_type(), &ast.loc));
+                    return Err(SemanticError::unexpected_type(e.get_type(), &e.loc));
                 }
             }
             _ => {

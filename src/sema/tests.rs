@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use crate::sema::analyze;
 use crate::tests::load_source;
+use crate::Error;
 
 fn assert_sema_error(name: &str) {
     let source = load_source(name);
@@ -11,6 +12,7 @@ fn assert_sema_error(name: &str) {
         Ok(_) => assert!(false, "sema returned no error: {}", name),
         Err(err) => {
             err.show_diagnostic(&source);
+            Error::from(err).show_trace();
             assert!(true);
         }
     }
@@ -20,4 +22,10 @@ fn assert_sema_error(name: &str) {
 fn step_09_syntax_err_bad_lvalue() {
     assert_sema_error("step_09/sema_err/invalid_lval_1.c");
     assert_sema_error("step_09/sema_err/invalid_lval_2.c");
+}
+
+#[test]
+fn step_18_pointer_arithmetic() {
+    assert_sema_error("step_18/sema_err/add_pointers.c");
+    assert_sema_error("step_18/sema_err/nonpointer_deref.c");
 }
