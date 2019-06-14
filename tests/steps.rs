@@ -249,3 +249,17 @@ fn step_18_pointer_arithmetic() {
         );
     });
 }
+
+#[test]
+#[cfg_attr(tarpaulin, skip)]
+fn step_19_sizeof() {
+    run_test(|| {
+        assert_exit_status("step_19/valid/sizeof_int_const.c", &[], &[], 4);
+        assert_exit_status("step_19/valid/sizeof_int_expr_1.c", &[], &[], 4);
+        assert_exit_status("step_19/valid/sizeof_int_expr_2.c", &[], &[], 4);
+        assert_exit_status("step_19/valid/sizeof_int_pointer_expr.c", &[], &[], 8);
+        assert_exit_status("step_19/valid/sizeof_int_pointer_var.c", &[], &[], 8);
+        assert_exit_status("step_19/valid/sizeof_int_var.c", &[], &[], 4);
+        assert_exit_status("step_19/valid/sizeof_sizeof.c", &[], &[], 4);
+    });
+}
