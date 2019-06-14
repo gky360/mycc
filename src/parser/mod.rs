@@ -130,6 +130,17 @@ impl<T> Annot<T> {
             ty: None,
         }
     }
+    pub fn new_with_type(value: T, loc: Loc, ty: Type) -> Self {
+        Self {
+            value,
+            loc,
+            ty: Some(ty),
+        }
+    }
+
+    pub fn get_type(&self) -> &Type {
+        self.ty.as_ref().expect("could not get type")
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -141,6 +152,20 @@ pub enum Type {
 impl Type {
     fn ptr(ty: Type) -> Self {
         Type::Ptr(Box::new(ty))
+    }
+
+    pub fn size(&self) -> u64 {
+        match self {
+            Type::Int => 4,
+            Type::Ptr(_) => 8,
+        }
+    }
+
+    pub fn is_ptr(&self) -> bool {
+        match self {
+            Type::Ptr(_) => true,
+            _ => false,
+        }
     }
 }
 
@@ -184,7 +209,6 @@ pub enum AstNode {
     Num(u64),
     VarRef {
         name: String,
-        ty: Type,
     },
     BinOp {
         op: BinOp,
@@ -270,10 +294,10 @@ impl Ast {
         Self::new(AstNode::StmtNull, loc)
     }
     fn num(n: u64, loc: Loc) -> Self {
-        Self::new(AstNode::Num(n), loc)
+        Self::new_with_type(AstNode::Num(n), loc, Type::Int)
     }
     fn var_ref(name: String, ty: Type, loc: Loc) -> Self {
-        Self::new(AstNode::VarRef { name, ty }, loc)
+        Self::new_with_type(AstNode::VarRef { name }, loc, ty)
     }
     fn binop(op: BinOp, l: Ast, r: Ast, loc: Loc) -> Self {
         Self::new(
@@ -984,6 +1008,8 @@ where
         TokenKind::Number(n) => Ok(Ast::num(n, token.loc)),
         TokenKind::Ident(name) => match tokens.peek().map(|token| &token.value) {
             Some(TokenKind::LParen) => {
+                // function call
+
                 consume(tokens, TokenKind::LParen)?;
                 let mut args = Vec::new();
                 loop {

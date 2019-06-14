@@ -5,15 +5,10 @@ use crate::asm::{Assembly, Ent, Function, Ins, Instructions, Label, Opr, Reg};
 use crate::lexer::{Annot, Loc};
 use crate::parser::{Ast, AstNode, BinOp, BinOpKind, Type, UniOp, UniOpKind};
 
-#[cfg(test)]
-#[cfg_attr(tarpaulin, skip)]
-mod tests;
-
 pub type Result<T> = std::result::Result<T, CompileError>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CompileErrorKind {
-    LValRequired,
     NotImplemented,
 }
 
@@ -23,10 +18,6 @@ pub struct CompileError(Annot<CompileErrorKind>);
 impl CompileError {
     fn new(kind: CompileErrorKind, loc: Loc) -> Self {
         CompileError(Annot::new(kind, loc))
-    }
-
-    fn lval_required(loc: Loc) -> Self {
-        CompileError::new(CompileErrorKind::LValRequired, loc)
     }
 
     #[allow(dead_code)]
@@ -51,11 +42,6 @@ impl fmt::Display for CompileError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::CompileErrorKind::*;
         match self.0.value {
-            LValRequired => write!(
-                f,
-                "{}: lvalue required as left operand of assignment",
-                self.0.loc
-            ),
             NotImplemented => write!(
                 f,
                 "{}: compiler is not implemented for this syntax",
@@ -197,7 +183,7 @@ impl Compiler {
                     },
                 e,
             } => self.compile_ast(ctx, e),
-            _ => Err(CompileError::lval_required(ast.loc.clone())),
+            _ => unreachable!("lval required"),
         }
     }
 

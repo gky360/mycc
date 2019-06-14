@@ -88,13 +88,13 @@ fn run_inner(opt: &Opt) -> Result<()> {
     let source = fs::read_to_string(&opt.input)?;
 
     // parse to generate AST
-    let ast = source.parse().map_err(|err: ParseError| {
+    let mut ast = source.parse().map_err(|err: ParseError| {
         err.show_diagnostic(&source);
         err
     })?;
 
     // analyze semantics
-    let ast = analyze(ast).map_err(|err| {
+    analyze(&mut ast).map_err(|err| {
         err.show_diagnostic(&source);
         err
     })?;
