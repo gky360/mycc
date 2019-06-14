@@ -245,7 +245,7 @@ fn step_18_pointer_arithmetic() {
             "step_18/valid/pointer_arithmetic_01.c",
             &[&temp_file_name(&tmp_dir, "alloc4.o")],
             &[],
-            4,
+            8,
         );
     });
 }
