@@ -141,22 +141,26 @@ impl Compiler {
         ctx.inss.push(Ins::PUSH(Direct(RBP)));
         ctx.inss.push(Ins::MOV(Direct(RBP), Direct(RSP)));
 
-        let local_area = 8 * (args.len() + lvars.len()) as u64;
+        let local_area = 8 * (lvars.len()) as u64;
         ctx.inss.push(Ins::SUB(Direct(RSP), Literal(local_area)));
         ctx.inss.stackpos += local_area as i32;
 
         // setup var_offset
-        for (i, (arg, ty)) in args.iter().enumerate() {
-            let offset = 8 * (ctx.var_offset.len() + 1) as u64;
-            ctx.var_offset.insert(arg.clone(), (ty.clone(), offset));
-            ctx.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
-            ctx.inss.push(Ins::SUB(Direct(RAX), Literal(offset)));
-            ctx.inss
-                .push(Ins::MOV(Indirect(RAX), Direct(Self::ARG_REGS[i])));
-        }
         for (lvar, ty) in lvars {
             let offset = 8 * (ctx.var_offset.len() + 1) as u64;
             ctx.var_offset.insert(lvar.clone(), (ty.clone(), offset));
+        }
+
+        // copy args from reigsters into stack
+        for (i, (arg, _ty)) in args.iter().enumerate() {
+            let (_ty, offset) = ctx
+                .var_offset
+                .get(arg)
+                .expect(&format!("arg not found in local variable list: {}", arg));
+            ctx.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
+            ctx.inss.push(Ins::SUB(Direct(RAX), Literal(*offset)));
+            ctx.inss
+                .push(Ins::MOV(Indirect(RAX), Direct(Self::ARG_REGS[i])));
         }
 
         self.compile_ast(&mut ctx, body)?;

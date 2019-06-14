@@ -160,6 +160,7 @@ pub enum AstNode {
     Func {
         name: String,
         args: Vec<(String, Type)>,
+        /// local variables including function arguments
         lvars: HashMap<String, Type>,
         body: Box<Ast>,
     },
@@ -528,9 +529,11 @@ where
             consume(tokens, TokenKind::Comma)?;
         }
         let (type_name, _) = consume_type_name(tokens)?;
-        let (arg, ty, _) = parse_declarator(&mut ctx, tokens, type_name.into())?;
-        // TODO: check duplicate arg name
-        ctx.args.push((arg, ty));
+        let (arg, ty, d_loc) = parse_declarator(&mut ctx, tokens, type_name.into())?;
+        ctx.args.push((arg.clone(), ty.clone()));
+        if ctx.lvars.insert(arg.clone(), ty).is_some() {
+            return Err(ParseError::Redefinition(Token::ident(&arg, d_loc)));
+        }
     }
     consume(tokens, TokenKind::RParen)?;
 
@@ -998,17 +1001,14 @@ where
             _ => {
                 // TODO: support env
                 let ty = match ctx.lvars.get(&name) {
-                    Some(ty) => Ok(ty),
-                    _ => ctx
-                        .args
-                        .iter()
-                        .find(|&(item, _)| item == &name)
-                        .map(|(_, ty)| ty)
-                        .ok_or(ParseError::Undeclared(Token::ident(
+                    Some(ty) => ty,
+                    None => {
+                        return Err(ParseError::Undeclared(Token::ident(
                             &name,
                             token.loc.clone(),
-                        ))),
-                }?;
+                        )))
+                    }
+                };
 
                 Ok(Ast::var_ref(name, ty.clone(), token.loc))
             }
