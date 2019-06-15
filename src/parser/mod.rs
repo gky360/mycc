@@ -488,8 +488,8 @@ where
 /// stmt_while  = "while" "(" expr ")" stmt
 /// stmt_for    = "for" "(" (declaration | expr)? ";" expr? ";" expr? ")" stmt
 /// stmt_return = "return" expr ";"
-/// declaration = "int" declarator ("=" assign)?
-/// declarator  = ("*")* ident
+/// declaration = "int" declarator
+/// declarator  = ("*")* ident ("=" assign)?
 /// expr        = assign
 /// assign      = equality ("=" assign)?
 /// equality    = relational ("==" relational | "!=" relational)*
@@ -566,7 +566,8 @@ where
             consume(tokens, TokenKind::Comma)?;
         }
         let (type_name, _) = consume_type_name(tokens)?;
-        let (arg, ty, d_loc) = parse_declarator(&mut ctx, tokens, type_name.into())?;
+        // TODO: support default arguments
+        let (_assign, arg, ty, d_loc) = parse_declarator(&mut ctx, tokens, type_name.into())?;
         ctx.args.push((arg.clone(), ty.clone()));
         if ctx.lvars.insert(arg.clone(), ty).is_some() {
             return Err(ParseError::Redefinition(Token::ident(&arg, d_loc)));
@@ -763,7 +764,7 @@ where
 
 /// Parse declaration
 ///
-/// declaration = "int" declarator ("=" assign)?
+/// declaration = "int" declarator
 fn parse_declaration<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -771,21 +772,20 @@ where
     debug!("parse_declaration --");
 
     let (type_name, loc) = consume_type_name(tokens)?;
-    let (name, ty, ident_loc) = parse_declarator(ctx, tokens, type_name.into())?;
+    let (assign, name, ty, ident_loc) = parse_declarator(ctx, tokens, type_name.into())?;
     if ctx.lvars.insert(name.clone(), ty.clone()).is_some() {
         // already declared
         return Err(ParseError::Redefinition(Token::ident(&name, ident_loc)));
     }
 
-    let ret = match tokens.peek().map(|token| &token.value) {
-        Some(TokenKind::Assign) => {
-            let op = BinOp::assign(consume(tokens, TokenKind::Assign)?);
+    let ret = match assign {
+        Some(assign) => {
+            let op = BinOp::assign(Loc::NONE);
             let e = Ast::var_ref(name, ty, ident_loc);
-            let r = parse_assign(ctx, tokens)?;
-            let loc = loc.merge(&r.loc);
-            Ok(Ast::binop(op, e, r, loc))
+            let loc = loc.merge(&assign.loc);
+            Ok(Ast::binop(op, e, assign, loc))
         }
-        _ => Ok(Ast::stmt_null(loc.merge(&ident_loc))),
+        None => Ok(Ast::stmt_null(loc.merge(&ident_loc))),
     };
 
     debug!("parse_declaration: {:?}", ret);
@@ -794,12 +794,12 @@ where
 
 /// Parse declarator
 ///
-/// declarator  = ("*")* ident
+/// declarator  = ("*")* ident ("=" assign)?
 fn parse_declarator<T>(
-    _ctx: &mut Context,
+    ctx: &mut Context,
     tokens: &mut Peekable<T>,
     mut ty: Type,
-) -> Result<(String, Type, Loc)>
+) -> Result<(Option<Ast>, String, Type, Loc)>
 where
     T: Iterator<Item = Token>,
 {
@@ -812,7 +812,16 @@ where
     }
 
     let (name, ident_loc) = consume_ident(tokens)?;
-    let ret = Ok((name, ty, loc.merge(&ident_loc)));
+
+    let assign = match tokens.peek().map(|token| &token.value) {
+        Some(TokenKind::Assign) => {
+            consume(tokens, TokenKind::Assign)?;
+            Some(parse_assign(ctx, tokens)?)
+        }
+        _ => None,
+    };
+
+    let ret = Ok((assign, name, ty, loc.merge(&ident_loc)));
 
     debug!("parse_declarator: {:?}", ret);
     ret
