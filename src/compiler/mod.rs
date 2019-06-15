@@ -54,7 +54,7 @@ impl fmt::Display for CompileError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Context {
     inss: Instructions,
-    var_offset: HashMap<String, (Type, u64)>,
+    var_offset: HashMap<String, (Type, usize)>,
     ret_label: Label,
 }
 
@@ -127,13 +127,13 @@ impl Compiler {
         ctx.inss.push(Ins::PUSH(Direct(RBP)));
         ctx.inss.push(Ins::MOV(Direct(RBP), Direct(RSP)));
 
-        let local_area = 8 * (lvars.len()) as u64;
+        let local_area = 8 * (lvars.len());
         ctx.inss.push(Ins::SUB(Direct(RSP), Literal(local_area)));
         ctx.inss.stackpos += local_area as i32;
 
         // setup var_offset
         for (lvar, ty) in lvars {
-            let offset = 8 * (ctx.var_offset.len() + 1) as u64;
+            let offset = 8 * (ctx.var_offset.len() + 1);
             ctx.var_offset.insert(lvar.clone(), (ty.clone(), offset));
         }
 
@@ -340,7 +340,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_num(&mut self, ctx: &mut Context, num: u64) -> Result<()> {
+    fn compile_num(&mut self, ctx: &mut Context, num: usize) -> Result<()> {
         use Opr::*;
 
         ctx.inss.push(Ins::PUSH(Literal(num)));

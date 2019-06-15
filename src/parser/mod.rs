@@ -154,7 +154,7 @@ impl Type {
         Type::Ptr(Box::new(ty))
     }
 
-    pub fn size(&self) -> u64 {
+    pub fn size(&self) -> usize {
         match self {
             Type::Int => 4,
             Type::Ptr(_) => 8,
@@ -208,7 +208,7 @@ pub enum AstNode {
         stmt: Box<Ast>,
     },
     StmtNull,
-    Num(u64),
+    Num(usize),
     VarRef {
         name: String,
     },
@@ -295,7 +295,7 @@ impl Ast {
     fn stmt_null(loc: Loc) -> Self {
         Self::new(AstNode::StmtNull, loc)
     }
-    fn num(n: u64, loc: Loc) -> Self {
+    fn num(n: usize, loc: Loc) -> Self {
         Self::new_with_type(AstNode::Num(n), loc, Type::Int)
     }
     fn var_ref(name: String, ty: Type, loc: Loc) -> Self {

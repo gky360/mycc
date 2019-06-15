@@ -137,7 +137,7 @@ pub enum TypeName {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenKind {
     /// [0-9]+
-    Number(u64),
+    Number(usize),
     /// identifier
     Ident(String),
     /// keyword
@@ -215,7 +215,7 @@ impl fmt::Display for TokenKind {
 pub type Token = Annot<TokenKind>;
 
 impl Token {
-    pub fn number(n: u64, loc: Loc) -> Self {
+    pub fn number(n: usize, loc: Loc) -> Self {
         Self::new(TokenKind::Number(n), loc)
     }
     pub fn ident(name: &str, loc: Loc) -> Self {
