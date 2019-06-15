@@ -147,17 +147,22 @@ impl<T> Annot<T> {
 pub enum Type {
     Int,
     Ptr(Box<Type>),
+    Array(Box<Type>, usize),
 }
 
 impl Type {
     pub fn ptr(ty: Type) -> Self {
         Type::Ptr(Box::new(ty))
     }
+    pub fn array(ty: Type, len: usize) -> Self {
+        Type::Array(Box::new(ty), len)
+    }
 
     pub fn size(&self) -> usize {
         match self {
             Type::Int => 4,
             Type::Ptr(_) => 8,
+            Type::Array(ty, len) => ty.size() * len,
         }
     }
 }
@@ -175,6 +180,7 @@ impl fmt::Display for Type {
         match self {
             Type::Int => write!(f, "int"),
             Type::Ptr(ty) => write!(f, "*{}", ty),
+            Type::Array(ty, len) => write!(f, "{}[{}]", ty, len),
         }
     }
 }
