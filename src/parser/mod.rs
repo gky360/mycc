@@ -441,6 +441,23 @@ where
     }
 }
 
+fn consume_number<T>(tokens: &mut Peekable<T>) -> Result<(usize, Loc)>
+where
+    T: Iterator<Item = Token>,
+{
+    match tokens.next() {
+        Some(Token {
+            value: TokenKind::Number(n),
+            loc,
+        }) => Ok((n, loc)),
+        Some(token) => Err(ParseError::NeedTokenBefore(
+            token,
+            vec![TokenKind::Number(0)],
+        )),
+        None => Err(ParseError::Eof),
+    }
+}
+
 fn consume_ident<T>(tokens: &mut Peekable<T>) -> Result<(String, Loc)>
 where
     T: Iterator<Item = Token>,
@@ -489,7 +506,7 @@ where
 /// stmt_for    = "for" "(" (declaration | expr)? ";" expr? ";" expr? ")" stmt
 /// stmt_return = "return" expr ";"
 /// declaration = "int" declarator
-/// declarator  = ("*")* ident ("=" assign)?
+/// declarator  = ("*")* ident ("[" num "]")* ("=" assign)?
 /// expr        = assign
 /// assign      = equality ("=" assign)?
 /// equality    = relational ("==" relational | "!=" relational)*
@@ -794,7 +811,7 @@ where
 
 /// Parse declarator
 ///
-/// declarator  = ("*")* ident ("=" assign)?
+/// declarator  = ("*")* ident ("[" num "]")* ("=" assign)?
 fn parse_declarator<T>(
     ctx: &mut Context,
     tokens: &mut Peekable<T>,
@@ -812,16 +829,29 @@ where
     }
 
     let (name, ident_loc) = consume_ident(tokens)?;
+    loc = loc.merge(&ident_loc);
+
+    // read latter half of type name (e.g. `[3][5]`)
+    let mut lens = Vec::new();
+    while let Some(TokenKind::LBracket) = tokens.peek().map(|token| &token.value) {
+        consume(tokens, TokenKind::LBracket)?;
+        let (len, _loc) = consume_number(tokens)?;
+        lens.push(len);
+        loc = loc.merge(&consume(tokens, TokenKind::RBracket)?);
+    }
+    while let Some(len) = lens.pop() {
+        ty = Type::array(ty, len);
+    }
 
     let assign = match tokens.peek().map(|token| &token.value) {
         Some(TokenKind::Assign) => {
-            consume(tokens, TokenKind::Assign)?;
+            loc = loc.merge(&consume(tokens, TokenKind::Assign)?);
             Some(parse_assign(ctx, tokens)?)
         }
         _ => None,
     };
 
-    let ret = Ok((assign, name, ty, loc.merge(&ident_loc)));
+    let ret = Ok((assign, name, ty, loc));
 
     debug!("parse_declarator: {:?}", ret);
     ret
