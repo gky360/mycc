@@ -263,3 +263,11 @@ fn step_19_sizeof() {
         assert_exit_status("step_19/valid/sizeof_sizeof.c", &[], &[], 4);
     });
 }
+
+#[test]
+#[cfg_attr(tarpaulin, skip)]
+fn step_20_array() {
+    run_test(|| {
+        assert_exit_status("step_20/valid/declare_array.c", &[], &[], 0);
+    });
+}
