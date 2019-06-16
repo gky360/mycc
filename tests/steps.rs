@@ -269,5 +269,6 @@ fn step_19_sizeof() {
 fn step_20_array() {
     run_test(|| {
         assert_exit_status("step_20/valid/declare_array.c", &[], &[], 0);
+        assert_exit_status("step_20/valid/index_access.c", &[], &[], 4);
     });
 }
