@@ -513,11 +513,12 @@ where
 /// relational  = add ("<" add | "<=" add | ">" add | ">=" add)*
 /// add         = mul ("+" mul | "-" mul)*
 /// mul         = unary ("*" unary | "/" unary)*
-/// unary       = "sizeof" unary
-///             | ("+" | "-" | "&" | "*")? term
-/// term        = num
-///             | ident
+/// unary       = postfix
+///             | ("+" | "-" | "&" | "*" | "sizeof") unary
+/// postfix     = primary ("[" expr "]")*
+/// primary     = ident
 ///             | ident "(" (expr ("," expr)*)? ")"
+///             | num
 ///             | "(" expr ")"
 fn parse(tokens: Vec<Token>) -> Result<Ast> {
     debug!("parse --");
@@ -1012,8 +1013,8 @@ where
 
 /// Parse unary
 ///
-/// unary       = "sizeof" unary
-///             | ("+" | "-" | "&" | "*")? term
+/// unary       = postfix
+///             | ("+" | "-" | "&" | "*" | "sizeof") unary
 fn parse_unary<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -1021,54 +1022,81 @@ where
     debug!("parse_unary --");
 
     let ret = match tokens.peek().map(|token| &token.value) {
-        Some(TokenKind::Keyword(Keyword::Sizeof)) => {
-            let sizeof_loc = consume(tokens, TokenKind::Keyword(Keyword::Sizeof))?;
-            let e = parse_unary(ctx, tokens)?;
-            let loc = sizeof_loc.merge(&e.loc);
-            Ok(Ast::uniop(UniOp::sizeof(sizeof_loc), e, loc))
-        }
         Some(TokenKind::Plus)
         | Some(TokenKind::Minus)
         | Some(TokenKind::Amp)
-        | Some(TokenKind::Asterisk) => {
+        | Some(TokenKind::Asterisk)
+        | Some(TokenKind::Keyword(Keyword::Sizeof)) => {
             let token = tokens.next().unwrap();
             let op = match token.value {
                 TokenKind::Plus => UniOp::positive(token.loc),
                 TokenKind::Minus => UniOp::negative(token.loc),
                 TokenKind::Amp => UniOp::addr(token.loc),
                 TokenKind::Asterisk => UniOp::deref(token.loc),
+                TokenKind::Keyword(Keyword::Sizeof) => UniOp::sizeof(token.loc),
                 _ => unreachable!(),
             };
-            let e = parse_term(ctx, tokens)?;
+            let e = parse_unary(ctx, tokens)?;
             let loc = op.loc.merge(&e.loc);
             Ok(Ast::uniop(op, e, loc))
         }
-        _ => parse_term(ctx, tokens),
+        _ => parse_postfix(ctx, tokens),
     };
 
     debug!("parse_unary: {:?}", ret);
     ret
 }
 
-/// Parse term
+/// Parse postfix
 ///
-/// term        = num
-///             | ident
-///             | ident "(" (expr ("," expr)*)? ")"
-///             | "(" expr ")"
-fn parse_term<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
+/// postfix     = primary ("[" expr "]")*
+fn parse_postfix<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
-    debug!("parse_term --");
+    debug!("parse_postfix --");
+
+    let mut postfix = parse_primary(ctx, tokens)?;
+    loop {
+        match tokens.peek().map(|token| &token.value) {
+            Some(TokenKind::LBracket) => {
+                consume(tokens, TokenKind::LBracket)?;
+                let e = parse_expr(ctx, tokens)?;
+                let loc = postfix.loc.merge(&consume(tokens, TokenKind::RBracket)?);
+                postfix = Ast::binop(BinOp::add(Loc::NONE), postfix, e, loc);
+            }
+            _ => break,
+        }
+    }
+    let ret = Ok(postfix);
+
+    debug!("parse_postfix: {:?}", ret);
+    ret
+}
+
+/// Parse primary
+///
+/// primary     = ident
+///             | ident "(" (expr ("," expr)*)? ")"
+///             | num
+///             | "(" expr ")"
+fn parse_primary<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_primary --");
 
     let token = tokens.next().ok_or(ParseError::Eof)?;
     let ret = match token.value {
+        TokenKind::LParen => {
+            let e = parse_expr(ctx, tokens)?;
+            let loc = token.loc.merge(&consume(tokens, TokenKind::RParen)?);
+            Ok(Ast::new(e.value, loc))
+        }
         TokenKind::Number(n) => Ok(Ast::num(n, token.loc)),
-        TokenKind::Ident(name) => match tokens.peek().map(|token| &token.value) {
-            Some(TokenKind::LParen) => {
+        TokenKind::Ident(name) => {
+            if let Some(TokenKind::LParen) = tokens.peek().map(|token| &token.value) {
                 // function call
-
                 consume(tokens, TokenKind::LParen)?;
                 let mut args = Vec::new();
                 loop {
@@ -1082,8 +1110,7 @@ where
                 }
                 let loc = consume(tokens, TokenKind::RParen)?;
                 Ok(Ast::funcall(name, args, token.loc.merge(&loc)))
-            }
-            _ => {
+            } else {
                 // TODO: support env
                 let ty = match ctx.lvars.get(&name) {
                     Some(ty) => ty,
@@ -1094,24 +1121,12 @@ where
                         )))
                     }
                 };
-
                 Ok(Ast::var_ref(name, ty.clone(), token.loc))
-            }
-        },
-        TokenKind::LParen => {
-            let e = parse_expr(ctx, tokens)?;
-            match tokens.next() {
-                Some(Token {
-                    value: TokenKind::RParen,
-                    ..
-                }) => Ok(e),
-                Some(token) => Err(ParseError::RedundantExpression(token)),
-                None => Err(ParseError::UnclosedOpenParen(token)),
             }
         }
         _ => Err(ParseError::NotExpression(token)),
     };
 
-    debug!("parse_term: {:?}", ret);
+    debug!("parse_primary: {:?}", ret);
     ret
 }
