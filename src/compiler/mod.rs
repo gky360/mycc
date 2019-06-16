@@ -127,13 +127,18 @@ impl Compiler {
         ctx.inss.push(Ins::PUSH(Direct(RBP)));
         ctx.inss.push(Ins::MOV(Direct(RBP), Direct(RSP)));
 
-        let local_area = 8 * (lvars.len());
+        let local_area = lvars
+            .iter()
+            .map(|(_name, ty)| (ty.size() + 7) / 8 * 8)
+            .sum();
         ctx.inss.push(Ins::SUB(Direct(RSP), Literal(local_area)));
         ctx.inss.stackpos += local_area as i32;
 
         // setup var_offset
+        let mut cur = 0;
         for (lvar, ty) in lvars {
-            let offset = 8 * (ctx.var_offset.len() + 1);
+            let offset = local_area - cur;
+            cur += (ty.size() + 7) / 8 * 8;
             ctx.var_offset.insert(lvar.clone(), (ty.clone(), offset));
         }
 
@@ -228,11 +233,11 @@ impl Compiler {
 
         for ast in stmts {
             self.compile_ast(ctx, ast)?;
-            ctx.inss.push(Ins::POP(Direct(RAX)));
             if let AstNode::Ret { .. } = ast.value {
                 // ignore statements after return statement
-                break;
+                return Ok(());
             }
+            ctx.inss.push(Ins::POP(Direct(RAX)));
         }
         ctx.inss.push(Ins::PUSH(Direct(RAX)));
 
