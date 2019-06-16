@@ -158,6 +158,9 @@ impl Type {
             Type::Array(ty, len) => ty.size() * len,
         }
     }
+    pub fn words(&self) -> usize {
+        (self.size() + 7) / 8
+    }
 }
 
 impl From<TypeName> for Type {

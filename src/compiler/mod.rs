@@ -127,17 +127,15 @@ impl Compiler {
         ctx.inss.push(Ins::PUSH(Direct(RBP)));
         ctx.inss.push(Ins::MOV(Direct(RBP), Direct(RSP)));
 
-        let local_area = lvars
-            .iter()
-            .map(|(_name, ty)| (ty.size() + 7) / 8 * 8)
-            .sum();
+        let local_area = lvars.iter().map(|(_name, ty)| ty.words() * 8).sum();
         ctx.inss.push(Ins::SUB(Direct(RSP), Literal(local_area)));
+        // TODO: need more strict check
         ctx.inss.stackpos += local_area as i32;
 
         // setup var_offset
         let mut cur = 0;
         for (lvar, ty) in lvars {
-            cur += (ty.size() + 7) / 8 * 8;
+            cur += ty.words() * 8;
             let offset = cur;
             ctx.var_offset.insert(lvar.clone(), (ty.clone(), offset));
         }
