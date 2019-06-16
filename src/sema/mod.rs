@@ -79,9 +79,16 @@ pub fn analyze(ast: &mut Ast) -> Result<()> {
 }
 
 fn walk(ast: &mut Ast) -> Result<()> {
+    do_walk(ast, true)
+}
+
+fn walk_nodecay(ast: &mut Ast) -> Result<()> {
+    do_walk(ast, false)
+}
+
+fn do_walk(ast: &mut Ast, should_decay: bool) -> Result<()> {
     use AstNode::*;
 
-    // TODO: check types
     match ast.value {
         Program { .. } => unreachable!("invalid ast structure"),
         Func { .. } => unreachable!("invalid ast structure"),
@@ -126,15 +133,15 @@ fn walk(ast: &mut Ast) -> Result<()> {
             walk(stmt)?;
         }
         StmtNull => {}
-        Num(_) => {}
-        VarRef { .. } => {}
+        Num(_) => ast.ty = Some(Type::Int),
+        VarRef { ref ty, .. } => ast.ty = Some(maybe_decay(ty.clone(), should_decay)),
         BinOp {
             ref op,
             ref mut l,
             ref mut r,
         } => match op.value {
             BinOpKind::Assign => {
-                walk(l)?;
+                walk_nodecay(l)?;
                 check_lval(l)?;
                 walk(r)?;
                 ast.ty = l.ty.clone();
@@ -185,13 +192,14 @@ fn walk(ast: &mut Ast) -> Result<()> {
             UniOpKind::Deref => {
                 walk(e)?;
                 match e.get_type() {
-                    Type::Ptr(ty) => ast.ty = Some((ty as &Type).clone()),
+                    Type::Ptr(ty) => {
+                        ast.ty = Some(maybe_decay((ty as &Type).clone(), should_decay))
+                    }
                     _ => return Err(SemanticError::unexpected_type(e.get_type(), &e.loc)),
                 };
             }
             UniOpKind::Sizeof => {
-                walk(e)?;
-                eprintln!("{:?}", e);
+                walk_nodecay(e)?;
                 ast.value = AstNode::Num(e.get_type().size());
                 ast.ty = Some(Type::Int);
             }
@@ -212,6 +220,16 @@ fn walk(ast: &mut Ast) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn maybe_decay(ty: Type, should_decay: bool) -> Type {
+    if !should_decay {
+        return ty;
+    }
+    match ty {
+        Type::Array(ty, _len) => Type::Ptr(ty),
+        _ => ty,
+    }
 }
 
 fn check_lval(ast: &Ast) -> Result<()> {

@@ -130,13 +130,6 @@ impl<T> Annot<T> {
             ty: None,
         }
     }
-    pub fn new_with_type(value: T, loc: Loc, ty: Type) -> Self {
-        Self {
-            value,
-            loc,
-            ty: Some(ty),
-        }
-    }
 
     pub fn get_type(&self) -> &Type {
         self.ty.as_ref().expect("could not get type")
@@ -217,6 +210,7 @@ pub enum AstNode {
     Num(usize),
     VarRef {
         name: String,
+        ty: Type,
     },
     BinOp {
         op: BinOp,
@@ -302,10 +296,10 @@ impl Ast {
         Self::new(AstNode::StmtNull, loc)
     }
     fn num(n: usize, loc: Loc) -> Self {
-        Self::new_with_type(AstNode::Num(n), loc, Type::Int)
+        Self::new(AstNode::Num(n), loc)
     }
     fn var_ref(name: String, ty: Type, loc: Loc) -> Self {
-        Self::new_with_type(AstNode::VarRef { name }, loc, ty)
+        Self::new(AstNode::VarRef { name, ty }, loc)
     }
     fn binop(op: BinOp, l: Ast, r: Ast, loc: Loc) -> Self {
         Self::new(
@@ -1063,7 +1057,11 @@ where
                 consume(tokens, TokenKind::LBracket)?;
                 let e = parse_expr(ctx, tokens)?;
                 let loc = postfix.loc.merge(&consume(tokens, TokenKind::RBracket)?);
-                postfix = Ast::binop(BinOp::add(Loc::NONE), postfix, e, loc);
+                postfix = Ast::uniop(
+                    UniOp::deref(Loc::NONE),
+                    Ast::binop(BinOp::add(Loc::NONE), postfix, e, loc.clone()),
+                    loc,
+                );
             }
             _ => break,
         }
