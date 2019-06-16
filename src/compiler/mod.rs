@@ -137,8 +137,8 @@ impl Compiler {
         // setup var_offset
         let mut cur = 0;
         for (lvar, ty) in lvars {
-            let offset = local_area - cur;
             cur += (ty.size() + 7) / 8 * 8;
+            let offset = cur;
             ctx.var_offset.insert(lvar.clone(), (ty.clone(), offset));
         }
 

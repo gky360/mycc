@@ -134,7 +134,10 @@ fn do_walk(ast: &mut Ast, should_decay: bool) -> Result<()> {
         }
         StmtNull => {}
         Num(_) => ast.ty = Some(Type::Int),
-        VarRef { ref ty, .. } => ast.ty = Some(maybe_decay(ty.clone(), should_decay)),
+        VarRef { ref ty, .. } => {
+            ast.ty = Some(ty.clone());
+            maybe_decay(ast, should_decay);
+        }
         BinOp {
             ref op,
             ref mut l,
@@ -193,7 +196,8 @@ fn do_walk(ast: &mut Ast, should_decay: bool) -> Result<()> {
                 walk(e)?;
                 match e.get_type() {
                     Type::Ptr(ty) => {
-                        ast.ty = Some(maybe_decay((ty as &Type).clone(), should_decay))
+                        ast.ty = Some(ty.as_ref().clone());
+                        maybe_decay(ast, should_decay);
                     }
                     _ => return Err(SemanticError::unexpected_type(e.get_type(), &e.loc)),
                 };
@@ -222,13 +226,19 @@ fn do_walk(ast: &mut Ast, should_decay: bool) -> Result<()> {
     Ok(())
 }
 
-fn maybe_decay(ty: Type, should_decay: bool) -> Type {
+fn maybe_decay(ast: &mut Ast, should_decay: bool) {
     if !should_decay {
-        return ty;
+        return;
     }
-    match ty {
-        Type::Array(ty, _len) => Type::Ptr(ty),
-        _ => ty,
+    match &ast.ty {
+        Some(Type::Array(ty, _len)) => {
+            ast.value = AstNode::UniOp {
+                op: UniOp::new(UniOpKind::Addr, Loc::NONE),
+                e: Box::new(ast.clone()),
+            };
+            ast.ty = Some(Type::ptr(ty.as_ref().clone()));
+        }
+        _ => {}
     }
 }
 
