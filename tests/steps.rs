@@ -279,6 +279,6 @@ fn step_20_array() {
         assert_exit_status("step_20/valid/index_access_1.c", &[], &[], 0);
         assert_exit_status("step_20/valid/index_access_2.c", &[], &[], 7);
         assert_exit_status("step_20/valid/pointer_access.c", &[], &[], 0);
-        assert_exit_status("step_20/valid/sizeof_array.c", &[], &[], 20);
+        assert_exit_status("step_20/valid/sizeof_array.c", &[], &[], 4 * 5);
     });
 }

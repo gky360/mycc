@@ -269,10 +269,9 @@ fn scale_pointer(is_mul: bool, ast: &mut Ast, child_ty: &Type) {
     } else {
         unimplemented!("pointer subtraction is not implemented yet")
     };
-    *ast = Ast::binop(
+    ast.value = AstNode::BinOp {
         op,
-        ast.clone(),
-        Ast::num(child_ty.size(), Loc::NONE),
-        ast.loc.clone(),
-    );
+        l: Box::new(ast.clone()),
+        r: Box::new(Ast::num(child_ty.size(), Loc::NONE)),
+    };
 }
