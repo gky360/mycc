@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::lexer::{Annot, Loc};
-use crate::parser::{Ast, AstNode, BinOpKind, Type, UniOp, UniOpKind};
+use crate::parser::{Ast, AstNode, BinOp, BinOpKind, Type, UniOp, UniOpKind};
 
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]
@@ -264,14 +264,15 @@ fn check_int(ast: &Ast) -> Result<()> {
 }
 
 fn scale_pointer(is_mul: bool, ast: &mut Ast, child_ty: &Type) {
-    match ast.value {
-        AstNode::Num(ref mut n) => {
-            if is_mul {
-                *n *= child_ty.size();
-            } else {
-                unimplemented!("pointer subtraction is not implemented yet");
-            }
-        }
-        _ => unreachable!("could not scale pointer"),
-    }
+    let op = if is_mul {
+        BinOp::mul(Loc::NONE)
+    } else {
+        unimplemented!("pointer subtraction is not implemented yet")
+    };
+    *ast = Ast::binop(
+        op,
+        ast.clone(),
+        Ast::num(child_ty.size(), Loc::NONE),
+        ast.loc.clone(),
+    );
 }

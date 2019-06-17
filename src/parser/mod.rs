@@ -236,10 +236,10 @@ pub enum AstNode {
 pub type Ast = Annot<AstNode>;
 
 impl Ast {
-    fn program(funcs: Vec<Ast>, loc: Loc) -> Self {
+    pub fn program(funcs: Vec<Ast>, loc: Loc) -> Self {
         Self::new(AstNode::Program { funcs }, loc)
     }
-    fn func(
+    pub fn func(
         name: String,
         args: Vec<(String, Type)>,
         lvars: HashMap<String, Type>,
@@ -256,10 +256,10 @@ impl Ast {
             loc,
         )
     }
-    fn block(stmts: Vec<Ast>, loc: Loc) -> Self {
+    pub fn block(stmts: Vec<Ast>, loc: Loc) -> Self {
         Self::new(AstNode::Block(stmts), loc)
     }
-    fn stmt_if(cond: Ast, stmt: Ast, els: Option<Ast>, loc: Loc) -> Self {
+    pub fn stmt_if(cond: Ast, stmt: Ast, els: Option<Ast>, loc: Loc) -> Self {
         Self::new(
             AstNode::StmtIf {
                 cond: Box::new(cond),
@@ -269,7 +269,7 @@ impl Ast {
             loc,
         )
     }
-    fn stmt_while(cond: Ast, stmt: Ast, loc: Loc) -> Self {
+    pub fn stmt_while(cond: Ast, stmt: Ast, loc: Loc) -> Self {
         Self::new(
             AstNode::StmtWhile {
                 cond: Box::new(cond),
@@ -278,7 +278,7 @@ impl Ast {
             loc,
         )
     }
-    fn stmt_for(
+    pub fn stmt_for(
         init: Option<Ast>,
         cond: Option<Ast>,
         incr: Option<Ast>,
@@ -295,16 +295,16 @@ impl Ast {
             loc,
         )
     }
-    fn stmt_null(loc: Loc) -> Self {
+    pub fn stmt_null(loc: Loc) -> Self {
         Self::new(AstNode::StmtNull, loc)
     }
-    fn num(n: usize, loc: Loc) -> Self {
+    pub fn num(n: usize, loc: Loc) -> Self {
         Self::new(AstNode::Num(n), loc)
     }
-    fn var_ref(name: String, ty: Type, loc: Loc) -> Self {
+    pub fn var_ref(name: String, ty: Type, loc: Loc) -> Self {
         Self::new(AstNode::VarRef { name, ty }, loc)
     }
-    fn binop(op: BinOp, l: Ast, r: Ast, loc: Loc) -> Self {
+    pub fn binop(op: BinOp, l: Ast, r: Ast, loc: Loc) -> Self {
         Self::new(
             AstNode::BinOp {
                 op,
@@ -314,13 +314,13 @@ impl Ast {
             loc,
         )
     }
-    fn uniop(op: UniOp, e: Ast, loc: Loc) -> Self {
+    pub fn uniop(op: UniOp, e: Ast, loc: Loc) -> Self {
         Self::new(AstNode::UniOp { op, e: Box::new(e) }, loc)
     }
-    fn ret(e: Ast, loc: Loc) -> Self {
+    pub fn ret(e: Ast, loc: Loc) -> Self {
         Self::new(AstNode::Ret { e: Box::new(e) }, loc)
     }
-    fn funcall(name: String, args: Vec<Ast>, loc: Loc) -> Self {
+    pub fn funcall(name: String, args: Vec<Ast>, loc: Loc) -> Self {
         Self::new(AstNode::FuncCall { name, args }, loc)
     }
 }
@@ -352,37 +352,37 @@ pub enum BinOpKind {
 pub type BinOp = Annot<BinOpKind>;
 
 impl BinOp {
-    fn assign(loc: Loc) -> Self {
+    pub fn assign(loc: Loc) -> Self {
         Self::new(BinOpKind::Assign, loc)
     }
-    fn add(loc: Loc) -> Self {
+    pub fn add(loc: Loc) -> Self {
         Self::new(BinOpKind::Add, loc)
     }
-    fn sub(loc: Loc) -> Self {
+    pub fn sub(loc: Loc) -> Self {
         Self::new(BinOpKind::Sub, loc)
     }
-    fn mul(loc: Loc) -> Self {
+    pub fn mul(loc: Loc) -> Self {
         Self::new(BinOpKind::Mul, loc)
     }
-    fn div(loc: Loc) -> Self {
+    pub fn div(loc: Loc) -> Self {
         Self::new(BinOpKind::Div, loc)
     }
-    fn eq(loc: Loc) -> Self {
+    pub fn eq(loc: Loc) -> Self {
         Self::new(BinOpKind::Eq, loc)
     }
-    fn ne(loc: Loc) -> Self {
+    pub fn ne(loc: Loc) -> Self {
         Self::new(BinOpKind::Ne, loc)
     }
-    fn lt(loc: Loc) -> Self {
+    pub fn lt(loc: Loc) -> Self {
         Self::new(BinOpKind::Lt, loc)
     }
-    fn le(loc: Loc) -> Self {
+    pub fn le(loc: Loc) -> Self {
         Self::new(BinOpKind::Le, loc)
     }
-    fn gt(loc: Loc) -> Self {
+    pub fn gt(loc: Loc) -> Self {
         Self::new(BinOpKind::Gt, loc)
     }
-    fn ge(loc: Loc) -> Self {
+    pub fn ge(loc: Loc) -> Self {
         Self::new(BinOpKind::Ge, loc)
     }
 }
@@ -399,19 +399,19 @@ pub enum UniOpKind {
 pub type UniOp = Annot<UniOpKind>;
 
 impl UniOp {
-    fn positive(loc: Loc) -> Self {
+    pub fn positive(loc: Loc) -> Self {
         Self::new(UniOpKind::Positive, loc)
     }
-    fn negative(loc: Loc) -> Self {
+    pub fn negative(loc: Loc) -> Self {
         Self::new(UniOpKind::Negative, loc)
     }
-    fn addr(loc: Loc) -> Self {
+    pub fn addr(loc: Loc) -> Self {
         Self::new(UniOpKind::Addr, loc)
     }
-    fn deref(loc: Loc) -> Self {
+    pub fn deref(loc: Loc) -> Self {
         Self::new(UniOpKind::Deref, loc)
     }
-    fn sizeof(loc: Loc) -> Self {
+    pub fn sizeof(loc: Loc) -> Self {
         Self::new(UniOpKind::Sizeof, loc)
     }
 }
@@ -583,6 +583,10 @@ where
         let (type_name, _) = consume_type_name(tokens)?;
         // TODO: support default arguments
         let (_assign, arg, ty, d_loc) = parse_declarator(&mut ctx, tokens, type_name.into())?;
+        let ty = match ty {
+            Type::Array(ty, _len) => Type::Ptr(ty),
+            _ => ty,
+        };
         ctx.args.push((arg.clone(), ty.clone()));
         if ctx.lvars.insert(arg.clone(), ty).is_some() {
             return Err(ParseError::Redefinition(Token::ident(&arg, d_loc)));
