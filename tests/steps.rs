@@ -263,3 +263,22 @@ fn step_19_sizeof() {
         assert_exit_status("step_19/valid/sizeof_sizeof.c", &[], &[], 4);
     });
 }
+
+#[test]
+#[cfg_attr(tarpaulin, skip)]
+fn step_20_array() {
+    run_test(|| {
+        assert_exit_status("step_20/valid/2d_array_arg.c", &[], &[], 7);
+        assert_exit_status("step_20/valid/2d_array_pointer_1.c", &[], &[], 9);
+        assert_exit_status("step_20/valid/2d_array_pointer_2.c", &[], &[], 7);
+        assert_exit_status("step_20/valid/2d_sizeof.c", &[], &[], 4 * 3 * 3);
+        assert_exit_status("step_20/valid/array_arg.c", &[], &[], 11);
+        assert_exit_status("step_20/valid/declare_array.c", &[], &[], 0);
+        assert_exit_status("step_20/valid/deref_assign.c", &[], &[], 5);
+        assert_exit_status("step_20/valid/expr_index.c", &[], &[], 5);
+        assert_exit_status("step_20/valid/index_access_1.c", &[], &[], 0);
+        assert_exit_status("step_20/valid/index_access_2.c", &[], &[], 7);
+        assert_exit_status("step_20/valid/pointer_access.c", &[], &[], 0);
+        assert_exit_status("step_20/valid/sizeof_array.c", &[], &[], 4 * 5);
+    });
+}

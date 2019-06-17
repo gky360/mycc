@@ -230,7 +230,7 @@ impl fmt::Display for Label {
 pub enum Opr {
     Direct(Reg),
     Indirect(Reg),
-    Literal(u64),
+    Literal(usize),
 }
 
 impl fmt::Display for Opr {

@@ -137,7 +137,7 @@ pub enum TypeName {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenKind {
     /// [0-9]+
-    Number(u64),
+    Number(usize),
     /// identifier
     Ident(String),
     /// keyword
@@ -162,6 +162,10 @@ pub enum TokenKind {
     LParen,
     /// )
     RParen,
+    /// [
+    LBracket,
+    /// ]
+    RBracket,
     /// ,
     Comma,
     /// ;
@@ -199,6 +203,8 @@ impl fmt::Display for TokenKind {
             RBrace => write!(f, "}}"),
             LParen => write!(f, "("),
             RParen => write!(f, ")"),
+            LBracket => write!(f, "["),
+            RBracket => write!(f, "]"),
             Comma => write!(f, ","),
             Semicolon => write!(f, ";"),
             Assign => write!(f, "="),
@@ -215,7 +221,7 @@ impl fmt::Display for TokenKind {
 pub type Token = Annot<TokenKind>;
 
 impl Token {
-    pub fn number(n: u64, loc: Loc) -> Self {
+    pub fn number(n: usize, loc: Loc) -> Self {
         Self::new(TokenKind::Number(n), loc)
     }
     pub fn ident(name: &str, loc: Loc) -> Self {
@@ -253,6 +259,12 @@ impl Token {
     }
     pub fn rparen(loc: Loc) -> Self {
         Self::new(TokenKind::RParen, loc)
+    }
+    pub fn lbracket(loc: Loc) -> Self {
+        Self::new(TokenKind::LBracket, loc)
+    }
+    pub fn rbracket(loc: Loc) -> Self {
+        Self::new(TokenKind::RBracket, loc)
     }
     pub fn comma(loc: Loc) -> Self {
         Self::new(TokenKind::Comma, loc)
@@ -327,6 +339,8 @@ impl<'a> Lexer<'a> {
                 b'}' => lex_a_token!(self.lex_rbrace()),
                 b'(' => lex_a_token!(self.lex_lparen()),
                 b')' => lex_a_token!(self.lex_rparen()),
+                b'[' => lex_a_token!(self.lex_lbracket()),
+                b']' => lex_a_token!(self.lex_rbracket()),
                 b',' => lex_a_token!(self.lex_comma()),
                 b';' => lex_a_token!(self.lex_semicolon()),
                 b'=' => lex_a_token!(self.lex_assign_or_eq()),
@@ -429,6 +443,14 @@ impl<'a> Lexer<'a> {
     fn lex_rparen(&self) -> Result<Token> {
         self.consume_byte(b')')
             .map(|(_, end)| Token::rparen(Loc(end - 1, end)))
+    }
+    fn lex_lbracket(&self) -> Result<Token> {
+        self.consume_byte(b'[')
+            .map(|(_, end)| Token::lbracket(Loc(end - 1, end)))
+    }
+    fn lex_rbracket(&self) -> Result<Token> {
+        self.consume_byte(b']')
+            .map(|(_, end)| Token::rbracket(Loc(end - 1, end)))
     }
     fn lex_comma(&self) -> Result<Token> {
         self.consume_byte(b',')

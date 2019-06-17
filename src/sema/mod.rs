@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::lexer::{Annot, Loc};
-use crate::parser::{Ast, AstNode, BinOpKind, Type, UniOp, UniOpKind};
+use crate::parser::{Ast, AstNode, BinOp, BinOpKind, Type, UniOp, UniOpKind};
 
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]
@@ -79,9 +79,16 @@ pub fn analyze(ast: &mut Ast) -> Result<()> {
 }
 
 fn walk(ast: &mut Ast) -> Result<()> {
+    do_walk(ast, true)
+}
+
+fn walk_nodecay(ast: &mut Ast) -> Result<()> {
+    do_walk(ast, false)
+}
+
+fn do_walk(ast: &mut Ast, should_decay: bool) -> Result<()> {
     use AstNode::*;
 
-    // TODO: check types
     match ast.value {
         Program { .. } => unreachable!("invalid ast structure"),
         Func { .. } => unreachable!("invalid ast structure"),
@@ -126,15 +133,18 @@ fn walk(ast: &mut Ast) -> Result<()> {
             walk(stmt)?;
         }
         StmtNull => {}
-        Num(_) => {}
-        VarRef { .. } => {}
+        Num(_) => ast.ty = Some(Type::Int),
+        VarRef { ref ty, .. } => {
+            ast.ty = Some(ty.clone());
+            maybe_decay(ast, should_decay);
+        }
         BinOp {
             ref op,
             ref mut l,
             ref mut r,
         } => match op.value {
             BinOpKind::Assign => {
-                walk(l)?;
+                walk_nodecay(l)?;
                 check_lval(l)?;
                 walk(r)?;
                 ast.ty = l.ty.clone();
@@ -185,13 +195,15 @@ fn walk(ast: &mut Ast) -> Result<()> {
             UniOpKind::Deref => {
                 walk(e)?;
                 match e.get_type() {
-                    Type::Ptr(ty) => ast.ty = Some((ty as &Type).clone()),
+                    Type::Ptr(ty) => {
+                        ast.ty = Some(ty.as_ref().clone());
+                        maybe_decay(ast, should_decay);
+                    }
                     _ => return Err(SemanticError::unexpected_type(e.get_type(), &e.loc)),
                 };
             }
             UniOpKind::Sizeof => {
-                walk(e)?;
-                eprintln!("{:?}", e);
+                walk_nodecay(e)?;
                 ast.value = AstNode::Num(e.get_type().size());
                 ast.ty = Some(Type::Int);
             }
@@ -212,6 +224,22 @@ fn walk(ast: &mut Ast) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn maybe_decay(ast: &mut Ast, should_decay: bool) {
+    if !should_decay {
+        return;
+    }
+    match &ast.ty {
+        Some(Type::Array(ty, _len)) => {
+            ast.value = AstNode::UniOp {
+                op: UniOp::new(UniOpKind::Addr, Loc::NONE),
+                e: Box::new(ast.clone()),
+            };
+            ast.ty = Some(Type::ptr(ty.as_ref().clone()));
+        }
+        _ => {}
+    }
 }
 
 fn check_lval(ast: &Ast) -> Result<()> {
@@ -236,14 +264,14 @@ fn check_int(ast: &Ast) -> Result<()> {
 }
 
 fn scale_pointer(is_mul: bool, ast: &mut Ast, child_ty: &Type) {
-    match ast.value {
-        AstNode::Num(ref mut n) => {
-            if is_mul {
-                *n *= child_ty.size();
-            } else {
-                unimplemented!("pointer subtraction is not implemented yet");
-            }
-        }
-        _ => unreachable!("could not scale pointer"),
-    }
+    let op = if is_mul {
+        BinOp::mul(Loc::NONE)
+    } else {
+        unimplemented!("pointer subtraction is not implemented yet")
+    };
+    ast.value = AstNode::BinOp {
+        op,
+        l: Box::new(ast.clone()),
+        r: Box::new(Ast::num(child_ty.size(), Loc::NONE)),
+    };
 }

@@ -29,3 +29,9 @@ fn step_18_pointer_arithmetic() {
     assert_sema_error("step_18/sema_err/add_pointers.c");
     assert_sema_error("step_18/sema_err/nonpointer_deref.c");
 }
+
+#[test]
+fn step_20_array() {
+    assert_sema_error("step_20/sema_err/2d_array_binop.c");
+    assert_sema_error("step_20/sema_err/array_binop.c");
+}

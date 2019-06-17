@@ -130,13 +130,6 @@ impl<T> Annot<T> {
             ty: None,
         }
     }
-    pub fn new_with_type(value: T, loc: Loc, ty: Type) -> Self {
-        Self {
-            value,
-            loc,
-            ty: Some(ty),
-        }
-    }
 
     pub fn get_type(&self) -> &Type {
         self.ty.as_ref().expect("could not get type")
@@ -147,18 +140,26 @@ impl<T> Annot<T> {
 pub enum Type {
     Int,
     Ptr(Box<Type>),
+    Array(Box<Type>, usize),
 }
 
 impl Type {
     pub fn ptr(ty: Type) -> Self {
         Type::Ptr(Box::new(ty))
     }
+    pub fn array(ty: Type, len: usize) -> Self {
+        Type::Array(Box::new(ty), len)
+    }
 
-    pub fn size(&self) -> u64 {
+    pub fn size(&self) -> usize {
         match self {
             Type::Int => 4,
             Type::Ptr(_) => 8,
+            Type::Array(ty, len) => ty.size() * len,
         }
+    }
+    pub fn words(&self) -> usize {
+        (self.size() + 7) / 8
     }
 }
 
@@ -175,6 +176,7 @@ impl fmt::Display for Type {
         match self {
             Type::Int => write!(f, "int"),
             Type::Ptr(ty) => write!(f, "*{}", ty),
+            Type::Array(ty, len) => write!(f, "{}[{}]", ty, len),
         }
     }
 }
@@ -208,9 +210,10 @@ pub enum AstNode {
         stmt: Box<Ast>,
     },
     StmtNull,
-    Num(u64),
+    Num(usize),
     VarRef {
         name: String,
+        ty: Type,
     },
     BinOp {
         op: BinOp,
@@ -233,10 +236,10 @@ pub enum AstNode {
 pub type Ast = Annot<AstNode>;
 
 impl Ast {
-    fn program(funcs: Vec<Ast>, loc: Loc) -> Self {
+    pub fn program(funcs: Vec<Ast>, loc: Loc) -> Self {
         Self::new(AstNode::Program { funcs }, loc)
     }
-    fn func(
+    pub fn func(
         name: String,
         args: Vec<(String, Type)>,
         lvars: HashMap<String, Type>,
@@ -253,10 +256,10 @@ impl Ast {
             loc,
         )
     }
-    fn block(stmts: Vec<Ast>, loc: Loc) -> Self {
+    pub fn block(stmts: Vec<Ast>, loc: Loc) -> Self {
         Self::new(AstNode::Block(stmts), loc)
     }
-    fn stmt_if(cond: Ast, stmt: Ast, els: Option<Ast>, loc: Loc) -> Self {
+    pub fn stmt_if(cond: Ast, stmt: Ast, els: Option<Ast>, loc: Loc) -> Self {
         Self::new(
             AstNode::StmtIf {
                 cond: Box::new(cond),
@@ -266,7 +269,7 @@ impl Ast {
             loc,
         )
     }
-    fn stmt_while(cond: Ast, stmt: Ast, loc: Loc) -> Self {
+    pub fn stmt_while(cond: Ast, stmt: Ast, loc: Loc) -> Self {
         Self::new(
             AstNode::StmtWhile {
                 cond: Box::new(cond),
@@ -275,7 +278,7 @@ impl Ast {
             loc,
         )
     }
-    fn stmt_for(
+    pub fn stmt_for(
         init: Option<Ast>,
         cond: Option<Ast>,
         incr: Option<Ast>,
@@ -292,16 +295,16 @@ impl Ast {
             loc,
         )
     }
-    fn stmt_null(loc: Loc) -> Self {
+    pub fn stmt_null(loc: Loc) -> Self {
         Self::new(AstNode::StmtNull, loc)
     }
-    fn num(n: u64, loc: Loc) -> Self {
-        Self::new_with_type(AstNode::Num(n), loc, Type::Int)
+    pub fn num(n: usize, loc: Loc) -> Self {
+        Self::new(AstNode::Num(n), loc)
     }
-    fn var_ref(name: String, ty: Type, loc: Loc) -> Self {
-        Self::new_with_type(AstNode::VarRef { name }, loc, ty)
+    pub fn var_ref(name: String, ty: Type, loc: Loc) -> Self {
+        Self::new(AstNode::VarRef { name, ty }, loc)
     }
-    fn binop(op: BinOp, l: Ast, r: Ast, loc: Loc) -> Self {
+    pub fn binop(op: BinOp, l: Ast, r: Ast, loc: Loc) -> Self {
         Self::new(
             AstNode::BinOp {
                 op,
@@ -311,13 +314,13 @@ impl Ast {
             loc,
         )
     }
-    fn uniop(op: UniOp, e: Ast, loc: Loc) -> Self {
+    pub fn uniop(op: UniOp, e: Ast, loc: Loc) -> Self {
         Self::new(AstNode::UniOp { op, e: Box::new(e) }, loc)
     }
-    fn ret(e: Ast, loc: Loc) -> Self {
+    pub fn ret(e: Ast, loc: Loc) -> Self {
         Self::new(AstNode::Ret { e: Box::new(e) }, loc)
     }
-    fn funcall(name: String, args: Vec<Ast>, loc: Loc) -> Self {
+    pub fn funcall(name: String, args: Vec<Ast>, loc: Loc) -> Self {
         Self::new(AstNode::FuncCall { name, args }, loc)
     }
 }
@@ -349,37 +352,37 @@ pub enum BinOpKind {
 pub type BinOp = Annot<BinOpKind>;
 
 impl BinOp {
-    fn assign(loc: Loc) -> Self {
+    pub fn assign(loc: Loc) -> Self {
         Self::new(BinOpKind::Assign, loc)
     }
-    fn add(loc: Loc) -> Self {
+    pub fn add(loc: Loc) -> Self {
         Self::new(BinOpKind::Add, loc)
     }
-    fn sub(loc: Loc) -> Self {
+    pub fn sub(loc: Loc) -> Self {
         Self::new(BinOpKind::Sub, loc)
     }
-    fn mul(loc: Loc) -> Self {
+    pub fn mul(loc: Loc) -> Self {
         Self::new(BinOpKind::Mul, loc)
     }
-    fn div(loc: Loc) -> Self {
+    pub fn div(loc: Loc) -> Self {
         Self::new(BinOpKind::Div, loc)
     }
-    fn eq(loc: Loc) -> Self {
+    pub fn eq(loc: Loc) -> Self {
         Self::new(BinOpKind::Eq, loc)
     }
-    fn ne(loc: Loc) -> Self {
+    pub fn ne(loc: Loc) -> Self {
         Self::new(BinOpKind::Ne, loc)
     }
-    fn lt(loc: Loc) -> Self {
+    pub fn lt(loc: Loc) -> Self {
         Self::new(BinOpKind::Lt, loc)
     }
-    fn le(loc: Loc) -> Self {
+    pub fn le(loc: Loc) -> Self {
         Self::new(BinOpKind::Le, loc)
     }
-    fn gt(loc: Loc) -> Self {
+    pub fn gt(loc: Loc) -> Self {
         Self::new(BinOpKind::Gt, loc)
     }
-    fn ge(loc: Loc) -> Self {
+    pub fn ge(loc: Loc) -> Self {
         Self::new(BinOpKind::Ge, loc)
     }
 }
@@ -396,19 +399,19 @@ pub enum UniOpKind {
 pub type UniOp = Annot<UniOpKind>;
 
 impl UniOp {
-    fn positive(loc: Loc) -> Self {
+    pub fn positive(loc: Loc) -> Self {
         Self::new(UniOpKind::Positive, loc)
     }
-    fn negative(loc: Loc) -> Self {
+    pub fn negative(loc: Loc) -> Self {
         Self::new(UniOpKind::Negative, loc)
     }
-    fn addr(loc: Loc) -> Self {
+    pub fn addr(loc: Loc) -> Self {
         Self::new(UniOpKind::Addr, loc)
     }
-    fn deref(loc: Loc) -> Self {
+    pub fn deref(loc: Loc) -> Self {
         Self::new(UniOpKind::Deref, loc)
     }
-    fn sizeof(loc: Loc) -> Self {
+    pub fn sizeof(loc: Loc) -> Self {
         Self::new(UniOpKind::Sizeof, loc)
     }
 }
@@ -431,6 +434,23 @@ where
                 Err(ParseError::NeedTokenBefore(token, vec![kind]))
             }
         }
+        None => Err(ParseError::Eof),
+    }
+}
+
+fn consume_number<T>(tokens: &mut Peekable<T>) -> Result<(usize, Loc)>
+where
+    T: Iterator<Item = Token>,
+{
+    match tokens.next() {
+        Some(Token {
+            value: TokenKind::Number(n),
+            loc,
+        }) => Ok((n, loc)),
+        Some(token) => Err(ParseError::NeedTokenBefore(
+            token,
+            vec![TokenKind::Number(0)],
+        )),
         None => Err(ParseError::Eof),
     }
 }
@@ -482,19 +502,20 @@ where
 /// stmt_while  = "while" "(" expr ")" stmt
 /// stmt_for    = "for" "(" (declaration | expr)? ";" expr? ";" expr? ")" stmt
 /// stmt_return = "return" expr ";"
-/// declaration = "int" declarator ("=" assign)?
-/// declarator  = ("*")* ident
+/// declaration = "int" declarator
+/// declarator  = ("*")* ident ("[" num "]")* ("=" assign)?
 /// expr        = assign
 /// assign      = equality ("=" assign)?
 /// equality    = relational ("==" relational | "!=" relational)*
 /// relational  = add ("<" add | "<=" add | ">" add | ">=" add)*
 /// add         = mul ("+" mul | "-" mul)*
 /// mul         = unary ("*" unary | "/" unary)*
-/// unary       = "sizeof" unary
-///             | ("+" | "-" | "&" | "*")? term
-/// term        = num
-///             | ident
+/// unary       = postfix
+///             | ("+" | "-" | "&" | "*" | "sizeof") unary
+/// postfix     = primary ("[" expr "]")*
+/// primary     = ident
 ///             | ident "(" (expr ("," expr)*)? ")"
+///             | num
 ///             | "(" expr ")"
 fn parse(tokens: Vec<Token>) -> Result<Ast> {
     debug!("parse --");
@@ -560,7 +581,12 @@ where
             consume(tokens, TokenKind::Comma)?;
         }
         let (type_name, _) = consume_type_name(tokens)?;
-        let (arg, ty, d_loc) = parse_declarator(&mut ctx, tokens, type_name.into())?;
+        // TODO: support default arguments
+        let (_assign, arg, ty, d_loc) = parse_declarator(&mut ctx, tokens, type_name.into())?;
+        let ty = match ty {
+            Type::Array(ty, _len) => Type::Ptr(ty),
+            _ => ty,
+        };
         ctx.args.push((arg.clone(), ty.clone()));
         if ctx.lvars.insert(arg.clone(), ty).is_some() {
             return Err(ParseError::Redefinition(Token::ident(&arg, d_loc)));
@@ -757,7 +783,7 @@ where
 
 /// Parse declaration
 ///
-/// declaration = "int" declarator ("=" assign)?
+/// declaration = "int" declarator
 fn parse_declaration<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -765,21 +791,20 @@ where
     debug!("parse_declaration --");
 
     let (type_name, loc) = consume_type_name(tokens)?;
-    let (name, ty, ident_loc) = parse_declarator(ctx, tokens, type_name.into())?;
+    let (assign, name, ty, ident_loc) = parse_declarator(ctx, tokens, type_name.into())?;
     if ctx.lvars.insert(name.clone(), ty.clone()).is_some() {
         // already declared
         return Err(ParseError::Redefinition(Token::ident(&name, ident_loc)));
     }
 
-    let ret = match tokens.peek().map(|token| &token.value) {
-        Some(TokenKind::Assign) => {
-            let op = BinOp::assign(consume(tokens, TokenKind::Assign)?);
+    let ret = match assign {
+        Some(assign) => {
+            let op = BinOp::assign(Loc::NONE);
             let e = Ast::var_ref(name, ty, ident_loc);
-            let r = parse_assign(ctx, tokens)?;
-            let loc = loc.merge(&r.loc);
-            Ok(Ast::binop(op, e, r, loc))
+            let loc = loc.merge(&assign.loc);
+            Ok(Ast::binop(op, e, assign, loc))
         }
-        _ => Ok(Ast::stmt_null(loc.merge(&ident_loc))),
+        None => Ok(Ast::stmt_null(loc.merge(&ident_loc))),
     };
 
     debug!("parse_declaration: {:?}", ret);
@@ -788,12 +813,12 @@ where
 
 /// Parse declarator
 ///
-/// declarator  = ("*")* ident
+/// declarator  = ("*")* ident ("[" num "]")* ("=" assign)?
 fn parse_declarator<T>(
-    _ctx: &mut Context,
+    ctx: &mut Context,
     tokens: &mut Peekable<T>,
     mut ty: Type,
-) -> Result<(String, Type, Loc)>
+) -> Result<(Option<Ast>, String, Type, Loc)>
 where
     T: Iterator<Item = Token>,
 {
@@ -806,7 +831,29 @@ where
     }
 
     let (name, ident_loc) = consume_ident(tokens)?;
-    let ret = Ok((name, ty, loc.merge(&ident_loc)));
+    loc = loc.merge(&ident_loc);
+
+    // read latter half of type name (e.g. `[3][5]`)
+    let mut lens = Vec::new();
+    while let Some(TokenKind::LBracket) = tokens.peek().map(|token| &token.value) {
+        consume(tokens, TokenKind::LBracket)?;
+        let (len, _loc) = consume_number(tokens)?;
+        lens.push(len);
+        loc = loc.merge(&consume(tokens, TokenKind::RBracket)?);
+    }
+    while let Some(len) = lens.pop() {
+        ty = Type::array(ty, len);
+    }
+
+    let assign = match tokens.peek().map(|token| &token.value) {
+        Some(TokenKind::Assign) => {
+            loc = loc.merge(&consume(tokens, TokenKind::Assign)?);
+            Some(parse_assign(ctx, tokens)?)
+        }
+        _ => None,
+    };
+
+    let ret = Ok((assign, name, ty, loc));
 
     debug!("parse_declarator: {:?}", ret);
     ret
@@ -967,8 +1014,8 @@ where
 
 /// Parse unary
 ///
-/// unary       = "sizeof" unary
-///             | ("+" | "-" | "&" | "*")? term
+/// unary       = postfix
+///             | ("+" | "-" | "&" | "*" | "sizeof") unary
 fn parse_unary<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -976,54 +1023,85 @@ where
     debug!("parse_unary --");
 
     let ret = match tokens.peek().map(|token| &token.value) {
-        Some(TokenKind::Keyword(Keyword::Sizeof)) => {
-            let sizeof_loc = consume(tokens, TokenKind::Keyword(Keyword::Sizeof))?;
-            let e = parse_unary(ctx, tokens)?;
-            let loc = sizeof_loc.merge(&e.loc);
-            Ok(Ast::uniop(UniOp::sizeof(sizeof_loc), e, loc))
-        }
         Some(TokenKind::Plus)
         | Some(TokenKind::Minus)
         | Some(TokenKind::Amp)
-        | Some(TokenKind::Asterisk) => {
+        | Some(TokenKind::Asterisk)
+        | Some(TokenKind::Keyword(Keyword::Sizeof)) => {
             let token = tokens.next().unwrap();
             let op = match token.value {
                 TokenKind::Plus => UniOp::positive(token.loc),
                 TokenKind::Minus => UniOp::negative(token.loc),
                 TokenKind::Amp => UniOp::addr(token.loc),
                 TokenKind::Asterisk => UniOp::deref(token.loc),
+                TokenKind::Keyword(Keyword::Sizeof) => UniOp::sizeof(token.loc),
                 _ => unreachable!(),
             };
-            let e = parse_term(ctx, tokens)?;
+            let e = parse_unary(ctx, tokens)?;
             let loc = op.loc.merge(&e.loc);
             Ok(Ast::uniop(op, e, loc))
         }
-        _ => parse_term(ctx, tokens),
+        _ => parse_postfix(ctx, tokens),
     };
 
     debug!("parse_unary: {:?}", ret);
     ret
 }
 
-/// Parse term
+/// Parse postfix
 ///
-/// term        = num
-///             | ident
-///             | ident "(" (expr ("," expr)*)? ")"
-///             | "(" expr ")"
-fn parse_term<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
+/// postfix     = primary ("[" expr "]")*
+fn parse_postfix<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
 {
-    debug!("parse_term --");
+    debug!("parse_postfix --");
+
+    let mut postfix = parse_primary(ctx, tokens)?;
+    loop {
+        match tokens.peek().map(|token| &token.value) {
+            Some(TokenKind::LBracket) => {
+                consume(tokens, TokenKind::LBracket)?;
+                let e = parse_expr(ctx, tokens)?;
+                let loc = postfix.loc.merge(&consume(tokens, TokenKind::RBracket)?);
+                postfix = Ast::uniop(
+                    UniOp::deref(Loc::NONE),
+                    Ast::binop(BinOp::add(Loc::NONE), postfix, e, loc.clone()),
+                    loc,
+                );
+            }
+            _ => break,
+        }
+    }
+    let ret = Ok(postfix);
+
+    debug!("parse_postfix: {:?}", ret);
+    ret
+}
+
+/// Parse primary
+///
+/// primary     = ident
+///             | ident "(" (expr ("," expr)*)? ")"
+///             | num
+///             | "(" expr ")"
+fn parse_primary<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Ast>
+where
+    T: Iterator<Item = Token>,
+{
+    debug!("parse_primary --");
 
     let token = tokens.next().ok_or(ParseError::Eof)?;
     let ret = match token.value {
+        TokenKind::LParen => {
+            let e = parse_expr(ctx, tokens)?;
+            let loc = token.loc.merge(&consume(tokens, TokenKind::RParen)?);
+            Ok(Ast::new(e.value, loc))
+        }
         TokenKind::Number(n) => Ok(Ast::num(n, token.loc)),
-        TokenKind::Ident(name) => match tokens.peek().map(|token| &token.value) {
-            Some(TokenKind::LParen) => {
+        TokenKind::Ident(name) => {
+            if let Some(TokenKind::LParen) = tokens.peek().map(|token| &token.value) {
                 // function call
-
                 consume(tokens, TokenKind::LParen)?;
                 let mut args = Vec::new();
                 loop {
@@ -1037,8 +1115,7 @@ where
                 }
                 let loc = consume(tokens, TokenKind::RParen)?;
                 Ok(Ast::funcall(name, args, token.loc.merge(&loc)))
-            }
-            _ => {
+            } else {
                 // TODO: support env
                 let ty = match ctx.lvars.get(&name) {
                     Some(ty) => ty,
@@ -1049,24 +1126,12 @@ where
                         )))
                     }
                 };
-
                 Ok(Ast::var_ref(name, ty.clone(), token.loc))
-            }
-        },
-        TokenKind::LParen => {
-            let e = parse_expr(ctx, tokens)?;
-            match tokens.next() {
-                Some(Token {
-                    value: TokenKind::RParen,
-                    ..
-                }) => Ok(e),
-                Some(token) => Err(ParseError::RedundantExpression(token)),
-                None => Err(ParseError::UnclosedOpenParen(token)),
             }
         }
         _ => Err(ParseError::NotExpression(token)),
     };
 
-    debug!("parse_term: {:?}", ret);
+    debug!("parse_primary: {:?}", ret);
     ret
 }
