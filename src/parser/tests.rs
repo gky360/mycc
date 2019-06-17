@@ -91,3 +91,8 @@ fn step_16_explicit_declare() {
     ];
     names.iter().for_each(|name| assert_parse_error(name))
 }
+
+#[test]
+fn step_20_array() {
+    assert_parse_error("step_20/parse_err/variable_length.c");
+}
