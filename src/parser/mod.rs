@@ -181,6 +181,13 @@ impl fmt::Display for Type {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Var {
+    pub name: String,
+    pub ty: Type,
+    pub is_local: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AstNode {
     Program {
@@ -188,9 +195,9 @@ pub enum AstNode {
     },
     Func {
         name: String,
-        args: Vec<(String, Type)>,
+        args: Vec<Var>,
         /// local variables including function arguments
-        lvars: HashMap<String, Type>,
+        lvars: HashMap<String, Var>,
         body: Box<Ast>,
     },
     Block(Vec<Ast>),
@@ -211,10 +218,7 @@ pub enum AstNode {
     },
     StmtNull,
     Num(usize),
-    VarRef {
-        name: String,
-        ty: Type,
-    },
+    VarRef(Var),
     BinOp {
         op: BinOp,
         l: Box<Ast>,
@@ -241,8 +245,8 @@ impl Ast {
     }
     pub fn func(
         name: String,
-        args: Vec<(String, Type)>,
-        lvars: HashMap<String, Type>,
+        args: Vec<Var>,
+        lvars: HashMap<String, Var>,
         body: Ast,
         loc: Loc,
     ) -> Self {
@@ -301,8 +305,8 @@ impl Ast {
     pub fn num(n: usize, loc: Loc) -> Self {
         Self::new(AstNode::Num(n), loc)
     }
-    pub fn var_ref(name: String, ty: Type, loc: Loc) -> Self {
-        Self::new(AstNode::VarRef { name, ty }, loc)
+    pub fn var_ref(name: String, ty: Type, is_local: bool, loc: Loc) -> Self {
+        Self::new(AstNode::VarRef(Var { name, ty, is_local }), loc)
     }
     pub fn binop(op: BinOp, l: Ast, r: Ast, loc: Loc) -> Self {
         Self::new(
@@ -418,8 +422,8 @@ impl UniOp {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Context {
-    args: Vec<(String, Type)>,
-    lvars: HashMap<String, Type>,
+    args: Vec<Var>,
+    lvars: HashMap<String, Var>,
 }
 
 fn consume<T>(tokens: &mut Peekable<T>, kind: TokenKind) -> Result<Loc>
@@ -587,8 +591,13 @@ where
             Type::Array(ty, _len) => Type::Ptr(ty),
             _ => ty,
         };
-        ctx.args.push((arg.clone(), ty.clone()));
-        if ctx.lvars.insert(arg.clone(), ty).is_some() {
+        let var = Var {
+            name: arg.clone(),
+            ty,
+            is_local: true,
+        };
+        ctx.args.push(var.clone());
+        if ctx.lvars.insert(arg.clone(), var).is_some() {
             return Err(ParseError::Redefinition(Token::ident(&arg, d_loc)));
         }
     }
@@ -792,7 +801,12 @@ where
 
     let (type_name, loc) = consume_type_name(tokens)?;
     let (assign, name, ty, ident_loc) = parse_declarator(ctx, tokens, type_name.into())?;
-    if ctx.lvars.insert(name.clone(), ty.clone()).is_some() {
+    let var = Var {
+        name: name.clone(),
+        ty: ty.clone(),
+        is_local: true,
+    };
+    if ctx.lvars.insert(name.clone(), var).is_some() {
         // already declared
         return Err(ParseError::Redefinition(Token::ident(&name, ident_loc)));
     }
@@ -800,7 +814,7 @@ where
     let ret = match assign {
         Some(assign) => {
             let op = BinOp::assign(Loc::NONE);
-            let e = Ast::var_ref(name, ty, ident_loc);
+            let e = Ast::var_ref(name, ty, true, ident_loc);
             let loc = loc.merge(&assign.loc);
             Ok(Ast::binop(op, e, assign, loc))
         }
@@ -1117,7 +1131,7 @@ where
                 Ok(Ast::funcall(name, args, token.loc.merge(&loc)))
             } else {
                 // TODO: support env
-                let ty = match ctx.lvars.get(&name) {
+                let ty = match ctx.lvars.get(&name).map(|var| &var.ty) {
                     Some(ty) => ty,
                     None => {
                         return Err(ParseError::Undeclared(Token::ident(
@@ -1126,7 +1140,7 @@ where
                         )))
                     }
                 };
-                Ok(Ast::var_ref(name, ty.clone(), token.loc))
+                Ok(Ast::var_ref(name, ty.clone(), true, token.loc))
             }
         }
         _ => Err(ParseError::NotExpression(token)),

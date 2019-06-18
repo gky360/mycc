@@ -3,7 +3,7 @@ use std::fmt;
 
 use crate::asm::{Assembly, Ent, Function, Ins, Instructions, Label, Opr, Reg};
 use crate::lexer::{Annot, Loc};
-use crate::parser::{Ast, AstNode, BinOp, BinOpKind, Type, UniOp, UniOpKind};
+use crate::parser::{Ast, AstNode, BinOp, BinOpKind, Type, UniOp, UniOpKind, Var};
 
 pub type Result<T> = std::result::Result<T, CompileError>;
 
@@ -109,8 +109,8 @@ impl Compiler {
     fn compile_func(
         &mut self,
         name: &str,
-        args: &Vec<(String, Type)>,
-        lvars: &HashMap<String, Type>,
+        args: &Vec<Var>,
+        lvars: &HashMap<String, Var>,
         body: &Ast,
     ) -> Result<Function> {
         use Opr::*;
@@ -127,25 +127,26 @@ impl Compiler {
         ctx.inss.push(Ins::PUSH(Direct(RBP)));
         ctx.inss.push(Ins::MOV(Direct(RBP), Direct(RSP)));
 
-        let local_area = lvars.iter().map(|(_name, ty)| ty.words() * 8).sum();
+        let local_area = lvars.iter().map(|(_name, var)| var.ty.words() * 8).sum();
         ctx.inss.push(Ins::SUB(Direct(RSP), Literal(local_area)));
         // TODO: need more strict check
         ctx.inss.stackpos += local_area as i32;
 
         // setup var_offset
         let mut cur = 0;
-        for (lvar, ty) in lvars {
-            cur += ty.words() * 8;
+        for (lvar, var) in lvars {
+            cur += var.ty.words() * 8;
             let offset = cur;
-            ctx.var_offset.insert(lvar.clone(), (ty.clone(), offset));
+            ctx.var_offset
+                .insert(lvar.clone(), (var.ty.clone(), offset));
         }
 
         // copy args from reigsters into stack
-        for (i, (arg, _ty)) in args.iter().enumerate() {
-            let (_ty, offset) = ctx
-                .var_offset
-                .get(arg)
-                .expect(&format!("arg not found in local variable list: {}", arg));
+        for (i, var) in args.iter().enumerate() {
+            let (_ty, offset) = ctx.var_offset.get(&var.name).expect(&format!(
+                "arg not found in local variable list: {}",
+                var.name
+            ));
             ctx.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
             ctx.inss.push(Ins::SUB(Direct(RAX), Literal(*offset)));
             ctx.inss
@@ -168,7 +169,7 @@ impl Compiler {
         use Reg::*;
 
         match &ast.value {
-            AstNode::VarRef { name, .. } => {
+            AstNode::VarRef(Var { name, .. }) => {
                 let (_, offset) = match ctx.var_offset.get(name) {
                     Some(offset) => offset,
                     None => unreachable!("local variable not found"),
