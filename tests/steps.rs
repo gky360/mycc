@@ -282,3 +282,15 @@ fn step_20_array() {
         assert_exit_status("step_20/valid/sizeof_array.c", &[], &[], 4 * 5);
     });
 }
+
+#[test]
+#[cfg_attr(tarpaulin, skip)]
+fn step_22_global_var() {
+    run_test(|| {
+        assert_exit_status("step_20/valid/declare_global_var.c", &[], &[], 7);
+        assert_exit_status("step_20/valid/global_arr.c", &[], &[], 7);
+        assert_exit_status("step_20/valid/init.c", &[], &[], 9);
+        assert_exit_status("step_20/valid/shadow_1.c", &[], &[], 3);
+        assert_exit_status("step_20/valid/shadow_2.c", &[], &[], 5);
+    });
+}

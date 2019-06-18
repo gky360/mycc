@@ -96,3 +96,8 @@ fn step_16_explicit_declare() {
 fn step_20_array() {
     assert_parse_error("step_20/parse_err/variable_length.c");
 }
+
+#[test]
+fn step_22_global_var() {
+    assert_parse_error("step_22/parse_err/global_arr_variable_len.c");
+}
