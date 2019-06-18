@@ -1,4 +1,4 @@
-int a = 7;
+int a;
 
 int main() {
     int a = 3;

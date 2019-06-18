@@ -287,10 +287,9 @@ fn step_20_array() {
 #[cfg_attr(tarpaulin, skip)]
 fn step_22_global_var() {
     run_test(|| {
-        assert_exit_status("step_20/valid/declare_global_var.c", &[], &[], 7);
-        assert_exit_status("step_20/valid/global_arr.c", &[], &[], 7);
-        assert_exit_status("step_20/valid/init.c", &[], &[], 9);
-        assert_exit_status("step_20/valid/shadow_1.c", &[], &[], 3);
-        assert_exit_status("step_20/valid/shadow_2.c", &[], &[], 5);
+        assert_exit_status("step_22/valid/declare_global_var.c", &[], &[], 7);
+        assert_exit_status("step_22/valid/global_arr.c", &[], &[], 7);
+        assert_exit_status("step_22/valid/shadow_1.c", &[], &[], 3);
+        assert_exit_status("step_22/valid/shadow_2.c", &[], &[], 5);
     });
 }
