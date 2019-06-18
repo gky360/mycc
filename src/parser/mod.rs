@@ -158,7 +158,7 @@ impl Type {
             Type::Array(ty, len) => ty.size() * len,
         }
     }
-    pub fn words(&self) -> usize {
+    pub fn qwords(&self) -> usize {
         (self.size() + 7) / 8
     }
 }
@@ -181,16 +181,24 @@ impl fmt::Display for Type {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Var {
+    pub name: String,
+    pub ty: Type,
+    pub is_local: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AstNode {
     Program {
         funcs: Vec<Ast>,
+        gvars: HashMap<String, Var>,
     },
     Func {
         name: String,
-        args: Vec<(String, Type)>,
+        args: Vec<Var>,
         /// local variables including function arguments
-        lvars: HashMap<String, Type>,
+        lvars: HashMap<String, Var>,
         body: Box<Ast>,
     },
     Block(Vec<Ast>),
@@ -211,10 +219,7 @@ pub enum AstNode {
     },
     StmtNull,
     Num(usize),
-    VarRef {
-        name: String,
-        ty: Type,
-    },
+    VarRef(Var),
     BinOp {
         op: BinOp,
         l: Box<Ast>,
@@ -236,13 +241,13 @@ pub enum AstNode {
 pub type Ast = Annot<AstNode>;
 
 impl Ast {
-    pub fn program(funcs: Vec<Ast>, loc: Loc) -> Self {
-        Self::new(AstNode::Program { funcs }, loc)
+    pub fn program(funcs: Vec<Ast>, gvars: HashMap<String, Var>, loc: Loc) -> Self {
+        Self::new(AstNode::Program { funcs, gvars }, loc)
     }
     pub fn func(
         name: String,
-        args: Vec<(String, Type)>,
-        lvars: HashMap<String, Type>,
+        args: Vec<Var>,
+        lvars: HashMap<String, Var>,
         body: Ast,
         loc: Loc,
     ) -> Self {
@@ -301,8 +306,8 @@ impl Ast {
     pub fn num(n: usize, loc: Loc) -> Self {
         Self::new(AstNode::Num(n), loc)
     }
-    pub fn var_ref(name: String, ty: Type, loc: Loc) -> Self {
-        Self::new(AstNode::VarRef { name, ty }, loc)
+    pub fn var_ref(var: Var, loc: Loc) -> Self {
+        Self::new(AstNode::VarRef(var), loc)
     }
     pub fn binop(op: BinOp, l: Ast, r: Ast, loc: Loc) -> Self {
         Self::new(
@@ -417,9 +422,82 @@ impl UniOp {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct Scope {
+    vars: HashMap<String, Var>,
+}
+
+impl Scope {
+    fn new() -> Self {
+        Scope {
+            vars: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Env {
+    scopes: Vec<Scope>,
+}
+
+impl Env {
+    fn new() -> Self {
+        Env {
+            scopes: vec![Scope::new()],
+        }
+    }
+
+    fn create_scope(&mut self) {
+        self.push_scope(Scope::new());
+    }
+    fn push_scope(&mut self, scope: Scope) {
+        self.scopes.push(scope);
+    }
+    fn pop_scope(&mut self) {
+        self.scopes.pop();
+    }
+
+    fn gvars(&self) -> HashMap<String, Var> {
+        self.scopes[0].vars.clone()
+    }
+
+    fn find_var(&self, name: &str) -> Option<&Var> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(var) = scope.vars.get(name) {
+                return Some(var);
+            }
+        }
+        None
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Context {
-    args: Vec<(String, Type)>,
-    lvars: HashMap<String, Type>,
+    env: Env,
+    lvars: Option<HashMap<String, Var>>,
+}
+
+impl Context {
+    fn new() -> Self {
+        Context {
+            env: Env::new(),
+            lvars: None,
+        }
+    }
+
+    fn add_gvar(&mut self, var: Var) -> Option<Var> {
+        self.env.scopes[0].vars.insert(var.name.clone(), var)
+    }
+    fn add_lvar(&mut self, var: Var) -> Option<Var> {
+        self.env
+            .scopes
+            .last_mut()
+            .expect("no scopes created")
+            .vars
+            .insert(var.name.clone(), var.clone());
+        self.lvars
+            .get_or_insert_with(|| HashMap::new())
+            .insert(var.name.clone(), var)
+    }
 }
 
 fn consume<T>(tokens: &mut Peekable<T>, kind: TokenKind) -> Result<Loc>
@@ -486,10 +564,30 @@ where
     }
 }
 
+/// read latter half of type name (e.g. `[3][5]`)
+fn read_array<T>(tokens: &mut Peekable<T>, mut ty: Type) -> Result<(Type, Loc)>
+where
+    T: Iterator<Item = Token>,
+{
+    let mut loc = Loc::NONE;
+    let mut lens = Vec::new();
+    while let Some(TokenKind::LBracket) = tokens.peek().map(|token| &token.value) {
+        consume(tokens, TokenKind::LBracket)?;
+        let (len, _loc) = consume_number(tokens)?;
+        lens.push(len);
+        loc = loc.merge(&consume(tokens, TokenKind::RBracket)?);
+    }
+    while let Some(len) = lens.pop() {
+        ty = Type::array(ty, len);
+    }
+    Ok((ty, loc))
+}
+
 /// Parse tokens with following rules
 ///
-/// program     = func*
-/// func        = "int" ident "(" ("int" declarator ("," "int" declarator)*)? ")" (";" | block)
+/// program     = toplevel*
+/// toplevel    = "int" ("*")* ident "(" ("int" declarator ("," "int" declarator)*)? ")" (";" | block)
+///             | "int" ("*")* ident ("[" num "]")* ";"
 /// stmt        = expr ";"
 ///             | block
 ///             | stmt_if
@@ -533,7 +631,7 @@ fn parse(tokens: Vec<Token>) -> Result<Ast> {
 
 /// Parse program
 ///
-/// program     = func*
+/// program     = toplevel*
 fn parse_program<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -541,73 +639,105 @@ where
     debug!("parse_program --");
 
     let mut loc = Loc::NONE;
+    let mut ctx = Context::new();
     let mut funcs = vec![];
     while let Some(_) = tokens.peek() {
-        let func = parse_func(tokens)?;
+        let func = parse_toplevel(&mut ctx, tokens)?;
         if let Some(func) = func {
             loc = loc.merge(&func.loc);
             funcs.push(func);
         }
     }
-    let ret = Ok(Ast::program(funcs, loc));
+    let ret = Ok(Ast::program(funcs, ctx.env.gvars(), loc));
 
     debug!("parse_program: {:?}", ret);
     ret
 }
 
-/// Parse func
+/// Parse toplevel
 ///
-/// func        = "int" ident "(" ("int" declarator ("," "int" declarator)*)? ")" (";" | block)
-fn parse_func<T>(tokens: &mut Peekable<T>) -> Result<Option<Ast>>
+/// toplevel    = "int" ("*")* ident "(" ("int" declarator ("," "int" declarator)*)? ")" (";" | block)
+///             | "int" ("*")* ident ("[" num "]")* ";"
+fn parse_toplevel<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Option<Ast>>
 where
     T: Iterator<Item = Token>,
 {
-    debug!("parse_func --");
+    debug!("parse_toplevel --");
 
-    let mut ctx = Context {
-        args: Vec::new(),
-        lvars: HashMap::new(),
-    };
-
-    let (_, loc) = consume_type_name(tokens)?;
-    let (name, _) = consume_ident(tokens)?;
-
-    consume(tokens, TokenKind::LParen)?;
-    loop {
-        if let Some(TokenKind::RParen) = tokens.peek().map(|token| &token.value) {
-            break;
-        }
-        if ctx.args.len() > 0 {
-            consume(tokens, TokenKind::Comma)?;
-        }
-        let (type_name, _) = consume_type_name(tokens)?;
-        // TODO: support default arguments
-        let (_assign, arg, ty, d_loc) = parse_declarator(&mut ctx, tokens, type_name.into())?;
-        let ty = match ty {
-            Type::Array(ty, _len) => Type::Ptr(ty),
-            _ => ty,
-        };
-        ctx.args.push((arg.clone(), ty.clone()));
-        if ctx.lvars.insert(arg.clone(), ty).is_some() {
-            return Err(ParseError::Redefinition(Token::ident(&arg, d_loc)));
-        }
+    let (ty, mut loc) = consume_type_name(tokens)?;
+    let mut ty = ty.into();
+    while let Some(TokenKind::Asterisk) = tokens.peek().map(|token| &token.value) {
+        loc = loc.merge(&consume(tokens, TokenKind::Asterisk)?);
+        ty = Type::ptr(ty);
     }
-    consume(tokens, TokenKind::RParen)?;
+    let (name, ident_loc) = consume_ident(tokens)?;
+    loc = loc.merge(&ident_loc);
 
-    let ret = match tokens.peek().map(|token| &token.value) {
-        Some(TokenKind::Semicolon) => {
-            tokens.next().unwrap();
-            // TODO: do not skip function declaration
-            Ok(None)
+    let ret = if let Some(TokenKind::LParen) = tokens.peek().map(|token| &token.value) {
+        // function
+
+        ctx.env.create_scope();
+        let mut args = Vec::new();
+
+        consume(tokens, TokenKind::LParen)?;
+        loop {
+            if let Some(TokenKind::RParen) = tokens.peek().map(|token| &token.value) {
+                break;
+            }
+            if args.len() > 0 {
+                consume(tokens, TokenKind::Comma)?;
+            }
+            let (type_name, _) = consume_type_name(tokens)?;
+            // TODO: support default arguments
+            let (_assign, arg, ty, d_loc) = parse_declarator(ctx, tokens, type_name.into())?;
+            let ty = match ty {
+                Type::Array(ty, _len) => Type::Ptr(ty),
+                _ => ty,
+            };
+            let var = Var {
+                name: arg.clone(),
+                ty,
+                is_local: true,
+            };
+            args.push(var.clone());
+            if ctx.add_lvar(var).is_some() {
+                return Err(ParseError::Redefinition(Token::ident(&arg, d_loc)));
+            }
         }
-        _ => {
-            let block = parse_block(&mut ctx, tokens)?;
-            let loc = loc.merge(&block.loc);
-            Ok(Some(Ast::func(name, ctx.args, ctx.lvars, block, loc)))
-        }
+        consume(tokens, TokenKind::RParen)?;
+
+        let ret = match tokens.peek().map(|token| &token.value) {
+            Some(TokenKind::Semicolon) => {
+                tokens.next().unwrap();
+                // TODO: do not skip function declaration
+                Ok(None)
+            }
+            _ => {
+                let block = parse_block(ctx, tokens)?;
+                loc = loc.merge(&block.loc);
+                let lvars = ctx.lvars.take().unwrap_or_else(|| HashMap::new());
+                Ok(Some(Ast::func(name, args, lvars, block, loc)))
+            }
+        };
+        ctx.env.pop_scope();
+        ret
+    } else {
+        // global var
+
+        let (ty, _loc) = read_array(tokens, ty)?;
+        consume(tokens, TokenKind::Semicolon)?;
+
+        let var = Var {
+            name: name,
+            ty,
+            is_local: false,
+        };
+        ctx.add_gvar(var);
+
+        Ok(None)
     };
 
-    debug!("parse_func: {:?}", ret);
+    debug!("parse_toplevel: {:?}", ret);
     ret
 }
 
@@ -792,7 +922,12 @@ where
 
     let (type_name, loc) = consume_type_name(tokens)?;
     let (assign, name, ty, ident_loc) = parse_declarator(ctx, tokens, type_name.into())?;
-    if ctx.lvars.insert(name.clone(), ty.clone()).is_some() {
+    let var = Var {
+        name: name.clone(),
+        ty: ty.clone(),
+        is_local: true,
+    };
+    if ctx.add_lvar(var).is_some() {
         // already declared
         return Err(ParseError::Redefinition(Token::ident(&name, ident_loc)));
     }
@@ -800,7 +935,14 @@ where
     let ret = match assign {
         Some(assign) => {
             let op = BinOp::assign(Loc::NONE);
-            let e = Ast::var_ref(name, ty, ident_loc);
+            let e = Ast::var_ref(
+                Var {
+                    name,
+                    ty,
+                    is_local: true,
+                },
+                ident_loc,
+            );
             let loc = loc.merge(&assign.loc);
             Ok(Ast::binop(op, e, assign, loc))
         }
@@ -833,17 +975,8 @@ where
     let (name, ident_loc) = consume_ident(tokens)?;
     loc = loc.merge(&ident_loc);
 
-    // read latter half of type name (e.g. `[3][5]`)
-    let mut lens = Vec::new();
-    while let Some(TokenKind::LBracket) = tokens.peek().map(|token| &token.value) {
-        consume(tokens, TokenKind::LBracket)?;
-        let (len, _loc) = consume_number(tokens)?;
-        lens.push(len);
-        loc = loc.merge(&consume(tokens, TokenKind::RBracket)?);
-    }
-    while let Some(len) = lens.pop() {
-        ty = Type::array(ty, len);
-    }
+    let (ty, arr_loc) = read_array(tokens, ty)?;
+    loc = loc.merge(&arr_loc);
 
     let assign = match tokens.peek().map(|token| &token.value) {
         Some(TokenKind::Assign) => {
@@ -1117,16 +1250,14 @@ where
                 Ok(Ast::funcall(name, args, token.loc.merge(&loc)))
             } else {
                 // TODO: support env
-                let ty = match ctx.lvars.get(&name) {
-                    Some(ty) => ty,
-                    None => {
-                        return Err(ParseError::Undeclared(Token::ident(
-                            &name,
-                            token.loc.clone(),
-                        )))
-                    }
-                };
-                Ok(Ast::var_ref(name, ty.clone(), token.loc))
+                let var = ctx
+                    .env
+                    .find_var(&name)
+                    .ok_or(ParseError::Undeclared(Token::ident(
+                        &name,
+                        token.loc.clone(),
+                    )))?;
+                Ok(Ast::var_ref(var.clone(), token.loc))
             }
         }
         _ => Err(ParseError::NotExpression(token)),

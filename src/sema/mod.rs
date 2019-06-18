@@ -59,7 +59,7 @@ impl fmt::Display for SemanticError {
 
 pub fn analyze(ast: &mut Ast) -> Result<()> {
     let funcs = match &mut ast.value {
-        AstNode::Program { funcs } => funcs,
+        AstNode::Program { funcs, .. } => funcs,
         _ => unreachable!("root ast node should be Program"),
     };
     for func in funcs {
@@ -134,8 +134,8 @@ fn do_walk(ast: &mut Ast, should_decay: bool) -> Result<()> {
         }
         StmtNull => {}
         Num(_) => ast.ty = Some(Type::Int),
-        VarRef { ref ty, .. } => {
-            ast.ty = Some(ty.clone());
+        VarRef(ref var) => {
+            ast.ty = Some(var.ty.clone());
             maybe_decay(ast, should_decay);
         }
         BinOp {
