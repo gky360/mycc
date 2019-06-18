@@ -491,10 +491,30 @@ where
     }
 }
 
+/// read latter half of type name (e.g. `[3][5]`)
+fn read_array<T>(tokens: &mut Peekable<T>, mut ty: Type) -> Result<(Type, Loc)>
+where
+    T: Iterator<Item = Token>,
+{
+    let mut loc = Loc::NONE;
+    let mut lens = Vec::new();
+    while let Some(TokenKind::LBracket) = tokens.peek().map(|token| &token.value) {
+        consume(tokens, TokenKind::LBracket)?;
+        let (len, _loc) = consume_number(tokens)?;
+        lens.push(len);
+        loc = loc.merge(&consume(tokens, TokenKind::RBracket)?);
+    }
+    while let Some(len) = lens.pop() {
+        ty = Type::array(ty, len);
+    }
+    Ok((ty, loc))
+}
+
 /// Parse tokens with following rules
 ///
-/// program     = func*
-/// func        = "int" ident "(" ("int" declarator ("," "int" declarator)*)? ")" (";" | block)
+/// program     = toplevel*
+/// toplevel    = "int" ("*")* ident "(" ("int" declarator ("," "int" declarator)*)? ")" (";" | block)
+///             | "int" ("*")* ident ("[" num "]")* ";"
 /// stmt        = expr ";"
 ///             | block
 ///             | stmt_if
@@ -538,7 +558,7 @@ fn parse(tokens: Vec<Token>) -> Result<Ast> {
 
 /// Parse program
 ///
-/// program     = func*
+/// program     = toplevel*
 fn parse_program<T>(tokens: &mut Peekable<T>) -> Result<Ast>
 where
     T: Iterator<Item = Token>,
@@ -549,7 +569,7 @@ where
     let mut funcs = vec![];
     let mut gvars = HashMap::new();
     while let Some(_) = tokens.peek() {
-        let func = parse_func(tokens)?;
+        let func = parse_toplevel(&mut gvars, tokens)?;
         if let Some(func) = func {
             loc = loc.merge(&func.loc);
             funcs.push(func);
@@ -561,64 +581,93 @@ where
     ret
 }
 
-/// Parse func
+/// Parse toplevel
 ///
-/// func        = "int" ident "(" ("int" declarator ("," "int" declarator)*)? ")" (";" | block)
-fn parse_func<T>(tokens: &mut Peekable<T>) -> Result<Option<Ast>>
+/// toplevel    = "int" ("*")* ident "(" ("int" declarator ("," "int" declarator)*)? ")" (";" | block)
+///             | "int" ("*")* ident ("[" num "]")* ";"
+fn parse_toplevel<T>(
+    gvars: &mut HashMap<String, Var>,
+    tokens: &mut Peekable<T>,
+) -> Result<Option<Ast>>
 where
     T: Iterator<Item = Token>,
 {
-    debug!("parse_func --");
+    debug!("parse_toplevel --");
 
-    let mut ctx = Context {
-        args: Vec::new(),
-        lvars: HashMap::new(),
-    };
-
-    let (_, loc) = consume_type_name(tokens)?;
-    let (name, _) = consume_ident(tokens)?;
-
-    consume(tokens, TokenKind::LParen)?;
-    loop {
-        if let Some(TokenKind::RParen) = tokens.peek().map(|token| &token.value) {
-            break;
-        }
-        if ctx.args.len() > 0 {
-            consume(tokens, TokenKind::Comma)?;
-        }
-        let (type_name, _) = consume_type_name(tokens)?;
-        // TODO: support default arguments
-        let (_assign, arg, ty, d_loc) = parse_declarator(&mut ctx, tokens, type_name.into())?;
-        let ty = match ty {
-            Type::Array(ty, _len) => Type::Ptr(ty),
-            _ => ty,
-        };
-        let var = Var {
-            name: arg.clone(),
-            ty,
-            is_local: true,
-        };
-        ctx.args.push(var.clone());
-        if ctx.lvars.insert(arg.clone(), var).is_some() {
-            return Err(ParseError::Redefinition(Token::ident(&arg, d_loc)));
-        }
+    let (ty, mut loc) = consume_type_name(tokens)?;
+    let mut ty = ty.into();
+    while let Some(TokenKind::Asterisk) = tokens.peek().map(|token| &token.value) {
+        loc = loc.merge(&consume(tokens, TokenKind::Asterisk)?);
+        ty = Type::ptr(ty);
     }
-    consume(tokens, TokenKind::RParen)?;
+    let (name, ident_loc) = consume_ident(tokens)?;
+    loc = loc.merge(&ident_loc);
 
-    let ret = match tokens.peek().map(|token| &token.value) {
-        Some(TokenKind::Semicolon) => {
-            tokens.next().unwrap();
-            // TODO: do not skip function declaration
-            Ok(None)
+    let ret = if let Some(TokenKind::LParen) = tokens.peek().map(|token| &token.value) {
+        // function
+
+        let mut ctx = Context {
+            args: Vec::new(),
+            lvars: HashMap::new(),
+        };
+
+        consume(tokens, TokenKind::LParen)?;
+        loop {
+            if let Some(TokenKind::RParen) = tokens.peek().map(|token| &token.value) {
+                break;
+            }
+            if ctx.args.len() > 0 {
+                consume(tokens, TokenKind::Comma)?;
+            }
+            let (type_name, _) = consume_type_name(tokens)?;
+            // TODO: support default arguments
+            let (_assign, arg, ty, d_loc) = parse_declarator(&mut ctx, tokens, type_name.into())?;
+            let ty = match ty {
+                Type::Array(ty, _len) => Type::Ptr(ty),
+                _ => ty,
+            };
+            let var = Var {
+                name: arg.clone(),
+                ty,
+                is_local: true,
+            };
+            ctx.args.push(var.clone());
+            if ctx.lvars.insert(arg.clone(), var).is_some() {
+                return Err(ParseError::Redefinition(Token::ident(&arg, d_loc)));
+            }
         }
-        _ => {
-            let block = parse_block(&mut ctx, tokens)?;
-            let loc = loc.merge(&block.loc);
-            Ok(Some(Ast::func(name, ctx.args, ctx.lvars, block, loc)))
-        }
+        consume(tokens, TokenKind::RParen)?;
+
+        let ret = match tokens.peek().map(|token| &token.value) {
+            Some(TokenKind::Semicolon) => {
+                tokens.next().unwrap();
+                // TODO: do not skip function declaration
+                Ok(None)
+            }
+            _ => {
+                let block = parse_block(&mut ctx, tokens)?;
+                loc = loc.merge(&block.loc);
+                Ok(Some(Ast::func(name, ctx.args, ctx.lvars, block, loc)))
+            }
+        };
+        ret
+    } else {
+        // global var
+
+        let (ty, _loc) = read_array(tokens, ty)?;
+        consume(tokens, TokenKind::Semicolon)?;
+
+        let var = Var {
+            name: name.clone(),
+            ty,
+            is_local: false,
+        };
+        gvars.insert(name, var);
+
+        Ok(None)
     };
 
-    debug!("parse_func: {:?}", ret);
+    debug!("parse_toplevel: {:?}", ret);
     ret
 }
 
@@ -849,17 +898,8 @@ where
     let (name, ident_loc) = consume_ident(tokens)?;
     loc = loc.merge(&ident_loc);
 
-    // read latter half of type name (e.g. `[3][5]`)
-    let mut lens = Vec::new();
-    while let Some(TokenKind::LBracket) = tokens.peek().map(|token| &token.value) {
-        consume(tokens, TokenKind::LBracket)?;
-        let (len, _loc) = consume_number(tokens)?;
-        lens.push(len);
-        loc = loc.merge(&consume(tokens, TokenKind::RBracket)?);
-    }
-    while let Some(len) = lens.pop() {
-        ty = Type::array(ty, len);
-    }
+    let (ty, arr_loc) = read_array(tokens, ty)?;
+    loc = loc.merge(&arr_loc);
 
     let assign = match tokens.peek().map(|token| &token.value) {
         Some(TokenKind::Assign) => {
