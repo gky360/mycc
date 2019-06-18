@@ -35,6 +35,8 @@ pub enum Ent {
     Dot(String, String),
     /// e.g. `main:`
     Fun(Function),
+    /// global variable
+    GloblVar(String, usize),
     /// empty line
     Empty,
     Raw(String),
@@ -56,6 +58,11 @@ impl fmt::Display for Ent {
         match self {
             Dot(name, content) => write!(f, ".{} {}", name, content),
             Fun(fun) => write!(f, "{}", fun),
+            GloblVar(name, size) => {
+                writeln!(f, ".bss")?;
+                writeln!(f, "{}:", name)?;
+                writeln!(f, "{}.zero {}", INDENT, size)
+            }
             Empty => write!(f, ""),
             Raw(s) => write!(f, "{}", s),
         }
@@ -79,6 +86,8 @@ impl Function {
 
 impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, ".text")?;
+        writeln!(f, ".global {}", self.name)?;
         writeln!(f, "{}:", self.name)?;
         write!(f, "{}", self.instructions)
     }
@@ -162,6 +171,7 @@ pub enum Ins {
     IMUL(Opr),
     JE(Label),
     JMP(Label),
+    LEA(Opr, Opr),
     MOV(Opr, Opr),
     MOVZB(Opr, Opr),
     POP(Opr),
@@ -194,6 +204,7 @@ impl fmt::Display for Ins {
             IMUL(opr) => write!(f, "imul {}", opr),
             JE(label) => write!(f, "je {}", label),
             JMP(label) => write!(f, "jmp {}", label),
+            LEA(opr1, opr2) => write!(f, "lea {}, {}", opr1, opr2),
             MOV(opr1, opr2) => write!(f, "mov {}, {}", opr1, opr2),
             MOVZB(opr1, opr2) => write!(f, "movzb {}, {}", opr1, opr2),
             POP(opr) => write!(f, "pop {}", opr),
@@ -226,11 +237,12 @@ impl fmt::Display for Label {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Opr {
     Direct(Reg),
     Indirect(Reg),
     Literal(usize),
+    Global(String),
 }
 
 impl fmt::Display for Opr {
@@ -240,6 +252,7 @@ impl fmt::Display for Opr {
             Direct(reg) => write!(f, "{}", reg),
             Indirect(reg) => write!(f, "[{}]", reg),
             Literal(l) => write!(f, "{}", l),
+            Global(name) => write!(f, "{}", name),
         }
     }
 }

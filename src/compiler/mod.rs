@@ -79,16 +79,25 @@ impl Compiler {
     pub fn compile(&mut self, ast: &Ast) -> Result<Assembly> {
         let mut assembly = Assembly::new(vec![Ent::dot("intel_syntax", "noprefix")]);
 
-        let funcs = match &ast.value {
-            AstNode::Program { funcs, gvars } => funcs,
+        let (funcs, gvars) = match &ast.value {
+            AstNode::Program { funcs, gvars } => (funcs, gvars.clone()),
             _ => unreachable!("root ast node should be Program"),
         };
-        self.compile_program(funcs, &mut assembly)?;
+        self.compile_program(funcs, gvars, &mut assembly)?;
 
         Ok(assembly)
     }
 
-    fn compile_program(&mut self, funcs: &Vec<Ast>, assembly: &mut Assembly) -> Result<()> {
+    fn compile_program(
+        &mut self,
+        funcs: &Vec<Ast>,
+        gvars: HashMap<String, Var>,
+        assembly: &mut Assembly,
+    ) -> Result<()> {
+        for (name, gvar) in gvars {
+            assembly.push(Ent::GloblVar(name, gvar.ty.size()));
+        }
+
         for func in funcs {
             let (name, args, lvars, body) = match &func.value {
                 AstNode::Func {
@@ -99,7 +108,6 @@ impl Compiler {
                 } => (name, args, lvars, body),
                 _ => unreachable!("ast node under Program should be Func"),
             };
-            assembly.push(Ent::dot("global", name));
             assembly.push(Ent::Fun(self.compile_func(name, args, lvars, body)?));
         }
 
@@ -127,7 +135,7 @@ impl Compiler {
         ctx.inss.push(Ins::PUSH(Direct(RBP)));
         ctx.inss.push(Ins::MOV(Direct(RBP), Direct(RSP)));
 
-        let local_area = lvars.iter().map(|(_name, var)| var.ty.words() * 8).sum();
+        let local_area = lvars.iter().map(|(_name, var)| var.ty.qwords() * 8).sum();
         ctx.inss.push(Ins::SUB(Direct(RSP), Literal(local_area)));
         // TODO: need more strict check
         ctx.inss.stackpos += local_area as i32;
@@ -135,7 +143,7 @@ impl Compiler {
         // setup var_offset
         let mut cur = 0;
         for (lvar, var) in lvars {
-            cur += var.ty.words() * 8;
+            cur += var.ty.qwords() * 8;
             let offset = cur;
             ctx.var_offset
                 .insert(lvar.clone(), (var.ty.clone(), offset));
@@ -169,14 +177,20 @@ impl Compiler {
         use Reg::*;
 
         match &ast.value {
-            AstNode::VarRef(Var { name, .. }) => {
-                let (_, offset) = match ctx.var_offset.get(name) {
-                    Some(offset) => offset,
-                    None => unreachable!("local variable not found"),
-                };
-                ctx.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
-                ctx.inss.push(Ins::SUB(Direct(RAX), Literal(*offset)));
-                ctx.inss.push(Ins::PUSH(Direct(RAX)));
+            AstNode::VarRef(var) => {
+                if var.is_local {
+                    let (_, offset) = match ctx.var_offset.get(&var.name) {
+                        Some(offset) => offset,
+                        None => unreachable!("local variable not found"),
+                    };
+                    ctx.inss.push(Ins::MOV(Direct(RAX), Direct(RBP)));
+                    ctx.inss.push(Ins::SUB(Direct(RAX), Literal(*offset)));
+                    ctx.inss.push(Ins::PUSH(Direct(RAX)));
+                } else {
+                    ctx.inss
+                        .push(Ins::LEA(Direct(RAX), Global(var.name.clone())));
+                    ctx.inss.push(Ins::PUSH(Direct(RAX)));
+                }
                 Ok(())
             }
             AstNode::UniOp {

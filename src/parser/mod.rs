@@ -158,7 +158,7 @@ impl Type {
             Type::Array(ty, len) => ty.size() * len,
         }
     }
-    pub fn words(&self) -> usize {
+    pub fn qwords(&self) -> usize {
         (self.size() + 7) / 8
     }
 }
