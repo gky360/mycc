@@ -80,7 +80,7 @@ impl Compiler {
         let mut assembly = Assembly::new(vec![Ent::dot("intel_syntax", "noprefix")]);
 
         let funcs = match &ast.value {
-            AstNode::Program { funcs } => funcs,
+            AstNode::Program { funcs, gvars } => funcs,
             _ => unreachable!("root ast node should be Program"),
         };
         self.compile_program(funcs, &mut assembly)?;

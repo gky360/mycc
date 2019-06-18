@@ -192,6 +192,7 @@ pub struct Var {
 pub enum AstNode {
     Program {
         funcs: Vec<Ast>,
+        gvars: HashMap<String, Var>,
     },
     Func {
         name: String,
@@ -240,8 +241,8 @@ pub enum AstNode {
 pub type Ast = Annot<AstNode>;
 
 impl Ast {
-    pub fn program(funcs: Vec<Ast>, loc: Loc) -> Self {
-        Self::new(AstNode::Program { funcs }, loc)
+    pub fn program(funcs: Vec<Ast>, gvars: HashMap<String, Var>, loc: Loc) -> Self {
+        Self::new(AstNode::Program { funcs, gvars }, loc)
     }
     pub fn func(
         name: String,
@@ -546,6 +547,7 @@ where
 
     let mut loc = Loc::NONE;
     let mut funcs = vec![];
+    let mut gvars = HashMap::new();
     while let Some(_) = tokens.peek() {
         let func = parse_func(tokens)?;
         if let Some(func) = func {
@@ -553,7 +555,7 @@ where
             funcs.push(func);
         }
     }
-    let ret = Ok(Ast::program(funcs, loc));
+    let ret = Ok(Ast::program(funcs, gvars, loc));
 
     debug!("parse_program: {:?}", ret);
     ret

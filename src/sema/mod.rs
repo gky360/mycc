@@ -59,7 +59,7 @@ impl fmt::Display for SemanticError {
 
 pub fn analyze(ast: &mut Ast) -> Result<()> {
     let funcs = match &mut ast.value {
-        AstNode::Program { funcs } => funcs,
+        AstNode::Program { funcs, .. } => funcs,
         _ => unreachable!("root ast node should be Program"),
     };
     for func in funcs {
