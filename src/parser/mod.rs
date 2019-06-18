@@ -306,8 +306,8 @@ impl Ast {
     pub fn num(n: usize, loc: Loc) -> Self {
         Self::new(AstNode::Num(n), loc)
     }
-    pub fn var_ref(name: String, ty: Type, is_local: bool, loc: Loc) -> Self {
-        Self::new(AstNode::VarRef(Var { name, ty, is_local }), loc)
+    pub fn var_ref(var: Var, loc: Loc) -> Self {
+        Self::new(AstNode::VarRef(var), loc)
     }
     pub fn binop(op: BinOp, l: Ast, r: Ast, loc: Loc) -> Self {
         Self::new(
@@ -422,9 +422,82 @@ impl UniOp {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct Scope {
+    vars: HashMap<String, Var>,
+}
+
+impl Scope {
+    fn new() -> Self {
+        Scope {
+            vars: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Env {
+    scopes: Vec<Scope>,
+}
+
+impl Env {
+    fn new() -> Self {
+        Env {
+            scopes: vec![Scope::new()],
+        }
+    }
+
+    fn create_scope(&mut self) {
+        self.push_scope(Scope::new());
+    }
+    fn push_scope(&mut self, scope: Scope) {
+        self.scopes.push(scope);
+    }
+    fn pop_scope(&mut self) {
+        self.scopes.pop();
+    }
+
+    fn gvars(&self) -> HashMap<String, Var> {
+        self.scopes[0].vars.clone()
+    }
+
+    fn find_var(&self, name: &str) -> Option<&Var> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(var) = scope.vars.get(name) {
+                return Some(var);
+            }
+        }
+        None
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Context {
-    args: Vec<Var>,
-    lvars: HashMap<String, Var>,
+    env: Env,
+    lvars: Option<HashMap<String, Var>>,
+}
+
+impl Context {
+    fn new() -> Self {
+        Context {
+            env: Env::new(),
+            lvars: None,
+        }
+    }
+
+    fn add_gvar(&mut self, var: Var) -> Option<Var> {
+        self.env.scopes[0].vars.insert(var.name.clone(), var)
+    }
+    fn add_lvar(&mut self, var: Var) -> Option<Var> {
+        self.env
+            .scopes
+            .last_mut()
+            .expect("no scopes created")
+            .vars
+            .insert(var.name.clone(), var.clone());
+        self.lvars
+            .get_or_insert_with(|| HashMap::new())
+            .insert(var.name.clone(), var)
+    }
 }
 
 fn consume<T>(tokens: &mut Peekable<T>, kind: TokenKind) -> Result<Loc>
@@ -566,16 +639,16 @@ where
     debug!("parse_program --");
 
     let mut loc = Loc::NONE;
+    let mut ctx = Context::new();
     let mut funcs = vec![];
-    let mut gvars = HashMap::new();
     while let Some(_) = tokens.peek() {
-        let func = parse_toplevel(&mut gvars, tokens)?;
+        let func = parse_toplevel(&mut ctx, tokens)?;
         if let Some(func) = func {
             loc = loc.merge(&func.loc);
             funcs.push(func);
         }
     }
-    let ret = Ok(Ast::program(funcs, gvars, loc));
+    let ret = Ok(Ast::program(funcs, ctx.env.gvars(), loc));
 
     debug!("parse_program: {:?}", ret);
     ret
@@ -585,10 +658,7 @@ where
 ///
 /// toplevel    = "int" ("*")* ident "(" ("int" declarator ("," "int" declarator)*)? ")" (";" | block)
 ///             | "int" ("*")* ident ("[" num "]")* ";"
-fn parse_toplevel<T>(
-    gvars: &mut HashMap<String, Var>,
-    tokens: &mut Peekable<T>,
-) -> Result<Option<Ast>>
+fn parse_toplevel<T>(ctx: &mut Context, tokens: &mut Peekable<T>) -> Result<Option<Ast>>
 where
     T: Iterator<Item = Token>,
 {
@@ -606,22 +676,20 @@ where
     let ret = if let Some(TokenKind::LParen) = tokens.peek().map(|token| &token.value) {
         // function
 
-        let mut ctx = Context {
-            args: Vec::new(),
-            lvars: HashMap::new(),
-        };
+        ctx.env.create_scope();
+        let mut args = Vec::new();
 
         consume(tokens, TokenKind::LParen)?;
         loop {
             if let Some(TokenKind::RParen) = tokens.peek().map(|token| &token.value) {
                 break;
             }
-            if ctx.args.len() > 0 {
+            if args.len() > 0 {
                 consume(tokens, TokenKind::Comma)?;
             }
             let (type_name, _) = consume_type_name(tokens)?;
             // TODO: support default arguments
-            let (_assign, arg, ty, d_loc) = parse_declarator(&mut ctx, tokens, type_name.into())?;
+            let (_assign, arg, ty, d_loc) = parse_declarator(ctx, tokens, type_name.into())?;
             let ty = match ty {
                 Type::Array(ty, _len) => Type::Ptr(ty),
                 _ => ty,
@@ -631,8 +699,8 @@ where
                 ty,
                 is_local: true,
             };
-            ctx.args.push(var.clone());
-            if ctx.lvars.insert(arg.clone(), var).is_some() {
+            args.push(var.clone());
+            if ctx.add_lvar(var).is_some() {
                 return Err(ParseError::Redefinition(Token::ident(&arg, d_loc)));
             }
         }
@@ -645,11 +713,13 @@ where
                 Ok(None)
             }
             _ => {
-                let block = parse_block(&mut ctx, tokens)?;
+                let block = parse_block(ctx, tokens)?;
                 loc = loc.merge(&block.loc);
-                Ok(Some(Ast::func(name, ctx.args, ctx.lvars, block, loc)))
+                let lvars = ctx.lvars.take().unwrap_or_else(|| HashMap::new());
+                Ok(Some(Ast::func(name, args, lvars, block, loc)))
             }
         };
+        ctx.env.pop_scope();
         ret
     } else {
         // global var
@@ -658,11 +728,11 @@ where
         consume(tokens, TokenKind::Semicolon)?;
 
         let var = Var {
-            name: name.clone(),
+            name: name,
             ty,
             is_local: false,
         };
-        gvars.insert(name, var);
+        ctx.add_gvar(var);
 
         Ok(None)
     };
@@ -857,7 +927,7 @@ where
         ty: ty.clone(),
         is_local: true,
     };
-    if ctx.lvars.insert(name.clone(), var).is_some() {
+    if ctx.add_lvar(var).is_some() {
         // already declared
         return Err(ParseError::Redefinition(Token::ident(&name, ident_loc)));
     }
@@ -865,7 +935,14 @@ where
     let ret = match assign {
         Some(assign) => {
             let op = BinOp::assign(Loc::NONE);
-            let e = Ast::var_ref(name, ty, true, ident_loc);
+            let e = Ast::var_ref(
+                Var {
+                    name,
+                    ty,
+                    is_local: true,
+                },
+                ident_loc,
+            );
             let loc = loc.merge(&assign.loc);
             Ok(Ast::binop(op, e, assign, loc))
         }
@@ -1173,16 +1250,14 @@ where
                 Ok(Ast::funcall(name, args, token.loc.merge(&loc)))
             } else {
                 // TODO: support env
-                let ty = match ctx.lvars.get(&name).map(|var| &var.ty) {
-                    Some(ty) => ty,
-                    None => {
-                        return Err(ParseError::Undeclared(Token::ident(
-                            &name,
-                            token.loc.clone(),
-                        )))
-                    }
-                };
-                Ok(Ast::var_ref(name, ty.clone(), true, token.loc))
+                let var = ctx
+                    .env
+                    .find_var(&name)
+                    .ok_or(ParseError::Undeclared(Token::ident(
+                        &name,
+                        token.loc.clone(),
+                    )))?;
+                Ok(Ast::var_ref(var.clone(), token.loc))
             }
         }
         _ => Err(ParseError::NotExpression(token)),
