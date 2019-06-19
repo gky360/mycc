@@ -24,6 +24,7 @@ pub enum ParseError {
     NeedTypeNameBefore(Token),
     Redefinition(Token),
     Undeclared(Token),
+    ConflictingTypes(Token),
     Eof,
 }
 
@@ -40,7 +41,8 @@ impl ParseError {
             | NeedTokenBefore(Token { ref loc, .. }, _)
             | NeedTypeNameBefore(Token { ref loc, .. })
             | Redefinition(Token { ref loc, .. })
-            | Undeclared(Token { ref loc, .. }) => loc,
+            | Undeclared(Token { ref loc, .. })
+            | ConflictingTypes(Token { ref loc, .. }) => loc,
             RedundantExpression(Token { loc, .. }) => {
                 temp_loc = Loc(loc.0, input.len());
                 &temp_loc
@@ -110,6 +112,9 @@ impl fmt::Display for ParseError {
             ),
             Redefinition(token) => write!(f, "{}: redefinition of '{}'", token.loc, token.value),
             Undeclared(token) => write!(f, "{}: '{}' undeclared", token.loc, token.value),
+            ConflictingTypes(token) => {
+                write!(f, "{}: conflicting types for '{}'", token.loc, token.value)
+            }
             Eof => write!(f, "unexpected end of file"),
         }
     }
@@ -199,6 +204,7 @@ pub enum AstNode {
         args: Vec<Var>,
         /// local variables including function arguments
         lvars: HashMap<String, Var>,
+        ret_ty: Type,
         body: Box<Ast>,
     },
     Block(Vec<Ast>),
@@ -235,6 +241,7 @@ pub enum AstNode {
     FuncCall {
         name: String,
         args: Vec<Ast>,
+        ret_ty: Type,
     },
 }
 
@@ -248,6 +255,7 @@ impl Ast {
         name: String,
         args: Vec<Var>,
         lvars: HashMap<String, Var>,
+        ret_ty: Type,
         body: Ast,
         loc: Loc,
     ) -> Self {
@@ -256,6 +264,7 @@ impl Ast {
                 name,
                 args,
                 lvars,
+                ret_ty,
                 body: Box::new(body),
             },
             loc,
@@ -325,8 +334,8 @@ impl Ast {
     pub fn ret(e: Ast, loc: Loc) -> Self {
         Self::new(AstNode::Ret { e: Box::new(e) }, loc)
     }
-    pub fn funcall(name: String, args: Vec<Ast>, loc: Loc) -> Self {
-        Self::new(AstNode::FuncCall { name, args }, loc)
+    pub fn funcall(name: String, args: Vec<Ast>, ret_ty: Type, loc: Loc) -> Self {
+        Self::new(AstNode::FuncCall { name, args, ret_ty }, loc)
     }
 }
 
@@ -474,6 +483,7 @@ impl Env {
 struct Context {
     env: Env,
     lvars: Option<HashMap<String, Var>>,
+    funcs: HashMap<String, Type>,
 }
 
 impl Context {
@@ -481,6 +491,7 @@ impl Context {
         Context {
             env: Env::new(),
             lvars: None,
+            funcs: HashMap::new(),
         }
     }
 
@@ -497,6 +508,13 @@ impl Context {
         self.lvars
             .get_or_insert_with(|| HashMap::new())
             .insert(var.name.clone(), var)
+    }
+
+    fn find_func(&self, name: &str) -> Option<&Type> {
+        self.funcs.get(name)
+    }
+    fn add_func(&mut self, name: &str, ret_ty: Type) -> Option<Type> {
+        self.funcs.insert(name.to_string(), ret_ty.clone())
     }
 }
 
@@ -704,19 +722,31 @@ where
                 return Err(ParseError::Redefinition(Token::ident(&arg, d_loc)));
             }
         }
-        consume(tokens, TokenKind::RParen)?;
+        loc = loc.merge(&consume(tokens, TokenKind::RParen)?);
+
+        match ctx.add_func(&name, ty.clone()) {
+            Some(ret_ty) => {
+                if ty != ret_ty {
+                    return Err(ParseError::ConflictingTypes(Token::ident(
+                        &name,
+                        loc.clone(),
+                    )));
+                }
+                // TODO: check duplicate declaration
+            }
+            None => {}
+        };
 
         let ret = match tokens.peek().map(|token| &token.value) {
             Some(TokenKind::Semicolon) => {
                 tokens.next().unwrap();
-                // TODO: do not skip function declaration
                 Ok(None)
             }
             _ => {
                 let block = parse_block(ctx, tokens)?;
                 loc = loc.merge(&block.loc);
                 let lvars = ctx.lvars.take().unwrap_or_else(|| HashMap::new());
-                Ok(Some(Ast::func(name, args, lvars, block, loc)))
+                Ok(Some(Ast::func(name, args, lvars, ty, block, loc)))
             }
         };
         ctx.env.pop_scope();
@@ -1247,7 +1277,12 @@ where
                     args.push(parse_expr(ctx, tokens)?);
                 }
                 let loc = consume(tokens, TokenKind::RParen)?;
-                Ok(Ast::funcall(name, args, token.loc.merge(&loc)))
+                let ret_ty = ctx
+                    .find_func(&name)
+                    .map(|ty| ty.clone())
+                    // TODO: warn users of the use of undeclared func
+                    .unwrap_or(Type::Int);
+                Ok(Ast::funcall(name, args, ret_ty, token.loc.merge(&loc)))
             } else {
                 // TODO: support env
                 let var = ctx

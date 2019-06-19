@@ -63,13 +63,8 @@ pub fn analyze(ast: &mut Ast) -> Result<()> {
         _ => unreachable!("root ast node should be Program"),
     };
     for func in funcs {
-        let (_name, _args, _lvars, mut body) = match &mut func.value {
-            AstNode::Func {
-                name,
-                args,
-                lvars,
-                body,
-            } => (name, args, lvars, body),
+        let mut body = match &mut func.value {
+            AstNode::Func { body, .. } => body,
             _ => unreachable!("ast node under Program should be Func"),
         };
         walk(&mut body)?;
@@ -214,12 +209,15 @@ fn do_walk(ast: &mut Ast, should_decay: bool) -> Result<()> {
             }
         },
         Ret { ref mut e } => walk(e)?,
-        FuncCall { ref mut args, .. } => {
+        FuncCall {
+            ref mut args,
+            ref ret_ty,
+            ..
+        } => {
             for arg in args {
                 walk(arg)?;
             }
-            // TODO: support returning type
-            ast.ty = Some(Type::Int);
+            ast.ty = Some(ret_ty.clone());
         }
     }
 

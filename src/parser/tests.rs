@@ -70,6 +70,7 @@ fn step_15_declare_func() {
     let names: &[&str] = &[
         // TODO: comment in these tests
         // "step_15/invalid/bad_arg.c",
+        "step_15/invalid/conflict_types.c",
         // "step_15/invalid/declaration_mismatch.c",
         // "step_15/invalid/declaration_mismatch_2.c",
         // "step_15/invalid/redefine_function.c",
@@ -100,4 +101,5 @@ fn step_20_array() {
 #[test]
 fn step_22_global_var() {
     assert_parse_error("step_22/parse_err/global_arr_variable_len.c");
+    assert_parse_error("step_22/parse_err/undeclared.c");
 }
