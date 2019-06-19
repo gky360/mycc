@@ -99,16 +99,19 @@ impl Compiler {
         }
 
         for func in funcs {
-            let (name, args, lvars, body) = match &func.value {
+            let (name, args, lvars, ret_ty, body) = match &func.value {
                 AstNode::Func {
                     name,
                     args,
                     lvars,
+                    ret_ty,
                     body,
-                } => (name, args, lvars, body),
+                } => (name, args, lvars, ret_ty, body),
                 _ => unreachable!("ast node under Program should be Func"),
             };
-            assembly.push(Ent::Fun(self.compile_func(name, args, lvars, body)?));
+            assembly.push(Ent::Fun(
+                self.compile_func(name, args, lvars, ret_ty, body)?,
+            ));
         }
 
         Ok(())
@@ -119,6 +122,7 @@ impl Compiler {
         name: &str,
         args: &Vec<Var>,
         lvars: &HashMap<String, Var>,
+        _ret_ty: &Type,
         body: &Ast,
     ) -> Result<Function> {
         use Opr::*;
@@ -236,7 +240,11 @@ impl Compiler {
             } => self.compile_binop(ctx, op, l, r),
             AstNode::UniOp { ref op, ref e } => self.compile_uniop(ctx, op, e),
             AstNode::Ret { ref e } => self.compile_ret(ctx, e),
-            AstNode::FuncCall { ref name, ref args } => self.compile_func_call(ctx, name, args),
+            AstNode::FuncCall {
+                ref name,
+                ref args,
+                ref ret_ty,
+            } => self.compile_func_call(ctx, name, args, ret_ty),
         }
     }
 
@@ -475,7 +483,13 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_func_call(&mut self, ctx: &mut Context, name: &str, args: &Vec<Ast>) -> Result<()> {
+    fn compile_func_call(
+        &mut self,
+        ctx: &mut Context,
+        name: &str,
+        args: &Vec<Ast>,
+        _ret_ty: &Type,
+    ) -> Result<()> {
         use Opr::*;
         use Reg::*;
 

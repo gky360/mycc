@@ -191,7 +191,13 @@ impl fmt::Display for TokenKind {
         use self::TokenKind::*;
         match self {
             Number(_) => write!(f, "{{number}}"),
-            Ident(_) => write!(f, "{{identifier}}"),
+            Ident(name) => {
+                if name == "" {
+                    write!(f, "{{identifier}}")
+                } else {
+                    write!(f, "{}", name)
+                }
+            }
             Keyword(key) => write!(f, "keyword {}", key),
             TypeName(ty) => write!(f, "type name {}", ty),
             Plus => write!(f, "+"),
