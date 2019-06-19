@@ -100,4 +100,5 @@ fn step_20_array() {
 #[test]
 fn step_22_global_var() {
     assert_parse_error("step_22/parse_err/global_arr_variable_len.c");
+    assert_parse_error("step_22/parse_err/undeclared.c");
 }
